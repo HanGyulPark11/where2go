@@ -26,7 +26,7 @@ end
 if CreateFrame then
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("BONUS_ROLL_RESULT")
-    eventFrame:SetScript("OnEvent", function(self, event, typeIdentifier, itemLink)
+    eventFrame:SetScript("OnEvent", function(_self, event, typeIdentifier, itemLink)
         if event ~= "BONUS_ROLL_RESULT" or typeIdentifier ~= "item" then
             return
         end

@@ -1,6 +1,6 @@
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:SetScript("OnEvent", function(self, event, loadedAddonName)
+eventFrame:SetScript("OnEvent", function(self, _event, loadedAddonName)
     if loadedAddonName ~= Where2GoConstants.ADDON_NAME then
         return
     end
