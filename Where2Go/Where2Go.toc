@@ -10,6 +10,7 @@ Core\Constants.lua
 Core\Tracks.lua
 Core\Sources.lua
 Core\RaidRanks.lua
+Core\Ranking.lua
 Core\Fixtures.lua
 Core\Compare.lua
 Core\Equipment.lua
