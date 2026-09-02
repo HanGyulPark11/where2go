@@ -6,6 +6,7 @@ local specs = {
     "tests/sources_spec.lua",
     "tests/raidranks_spec.lua",
     "tests/ranking_spec.lua",
+    "tests/voidcorehistory_spec.lua",
 }
 
 local failureCount = 0
