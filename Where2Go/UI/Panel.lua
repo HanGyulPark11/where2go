@@ -2,6 +2,9 @@ local panelFrame
 local contentFrame
 local cardFrames = {}
 local Layout
+local currentView = "DROP"
+
+local HEADER_HEIGHT = 62
 
 local function BuildHeaderText(result, expanded)
     local mark = expanded and "[-]" or "[+]"
@@ -75,7 +78,14 @@ Layout = function()
     end
     local totalHeight = -y
     contentFrame:SetHeight(totalHeight)
-    panelFrame:SetHeight(40 + totalHeight + 12)
+    panelFrame:SetHeight(HEADER_HEIGHT + totalHeight + 12)
+end
+
+local function GetRankedResultsForCurrentView()
+    if currentView == "VOIDCORE" then
+        return Where2GoVoidcoreDrop.GetRankedResults()
+    end
+    return Where2GoDirectDrop.GetRankedResults()
 end
 
 local function RefreshContent()
@@ -85,7 +95,7 @@ local function RefreshContent()
     end
     cardFrames = {}
 
-    local results = Where2GoDirectDrop.GetRankedResults()
+    local results = GetRankedResultsForCurrentView()
     if not results then
         local msgFrame = CreateFrame("Frame", nil, contentFrame)
         msgFrame:SetPoint("TOPLEFT", 0, 0)
@@ -94,7 +104,7 @@ local function RefreshContent()
         text:SetText("Where2Go: no specialization selected.")
         msgFrame:SetHeight(18)
         contentFrame:SetHeight(18)
-        panelFrame:SetHeight(40 + 18 + 12)
+        panelFrame:SetHeight(HEADER_HEIGHT + 18 + 12)
         return
     end
 
@@ -102,6 +112,27 @@ local function RefreshContent()
         table.insert(cardFrames, CreateCard(contentFrame, result))
     end
     Layout()
+end
+
+local function CreateTab(parent, label, view, x)
+    local tab = CreateFrame("Button", nil, parent)
+    tab:SetSize(80, 20)
+    tab:SetPoint("TOPLEFT", x, -34)
+
+    local bg = tab:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.2, 0.2, 0.2, 1)
+
+    local text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetPoint("CENTER")
+    text:SetText(label)
+
+    tab:SetScript("OnClick", function()
+        currentView = view
+        RefreshContent()
+    end)
+
+    return tab
 end
 
 local function CreatePanel()
@@ -132,8 +163,11 @@ local function CreatePanel()
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(Where2GoConstants.ADDON_NAME)
 
+    CreateTab(frame, "Drop", "DROP", 12)
+    CreateTab(frame, "Voidcore", "VOIDCORE", 96)
+
     contentFrame = CreateFrame("Frame", nil, frame)
-    contentFrame:SetPoint("TOPLEFT", 12, -40)
+    contentFrame:SetPoint("TOPLEFT", 12, -HEADER_HEIGHT)
     contentFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
 
     frame:Hide()
