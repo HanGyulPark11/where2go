@@ -4,6 +4,7 @@ local specs = {
     "tests/toc_spec.lua",
     "tests/tracks_spec.lua",
     "tests/compare_spec.lua",
+    "tests/sources_spec.lua",
 }
 
 local failureCount = 0
