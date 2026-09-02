@@ -26,9 +26,23 @@ Where2GoRaidRanks.RAID_BOSS_RANK = {
 Where2GoRaidRanks.MYTHIC_PLUS_TRACK_KEY = "HERO"
 Where2GoRaidRanks.MYTHIC_PLUS_TRACK_RANK = 3
 
+-- The final two Venomous Abyss bosses (Mythic difficulty only) drop a
+-- special Myth 9/6 track above the normal 6-rank crest cap. Ported from
+-- codex/pre-restart-backup's MYTHIC_FINAL_BOSS_IDS/MYTH_FINAL_BONUS_ID --
+-- confirmed via /where2go scanbonus on Ula'tek's Janthrazet the Soul Fang
+-- (item 271092): bonus ID 13848 -> ilvl 344.
+Where2GoRaidRanks.MYTH_FINAL_BOSS_IDS = { [2883] = true, [2895] = true }
+Where2GoRaidRanks.MYTH_FINAL_ILVL = 344
+Where2GoRaidRanks.MYTH_FINAL_RANK = 9
+
 -- Returns (ilvl, trackLabel, rank) for a Venomous-Abyss-style raid boss at
--- Mythic difficulty. Unlisted boss IDs default to rank 1.
+-- Mythic difficulty. The final two bosses (see MYTH_FINAL_BOSS_IDS above)
+-- are special-cased to the Myth 9/6 ilvl 344 track above the normal 1-4
+-- rank cap. Unlisted boss IDs default to rank 1.
 function Where2GoRaidRanks.GetRaidIlvl(bossId)
+    if Where2GoRaidRanks.MYTH_FINAL_BOSS_IDS[bossId] then
+        return Where2GoRaidRanks.MYTH_FINAL_ILVL, Where2GoTracks.UPGRADE_TRACKS.MYTH.label, Where2GoRaidRanks.MYTH_FINAL_RANK
+    end
     local rank = Where2GoRaidRanks.RAID_BOSS_RANK[bossId] or 1
     local track = Where2GoTracks.UPGRADE_TRACKS.MYTH
     return track.ilvls[rank], track.label, rank
