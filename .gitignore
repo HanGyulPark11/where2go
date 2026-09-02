@@ -1,3 +1,4 @@
 .worktrees/
 tools/data-prep/scratch/
 __pycache__/
+dist/
