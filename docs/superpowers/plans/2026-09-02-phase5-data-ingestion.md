@@ -315,7 +315,7 @@ confirm the output matches character-for-character except the outer
 
 Run:
 ```bash
-python3 -c "
+python -c "
 import sys
 sys.path.insert(0, 'tools/data-prep')
 from generate_sources import render_instance
