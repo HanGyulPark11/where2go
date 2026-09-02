@@ -11,6 +11,7 @@ Core\Tracks.lua
 Core\Sources.lua
 Core\RaidRanks.lua
 Core\Ranking.lua
+Core\DirectDrop.lua
 Core\Fixtures.lua
 Core\Compare.lua
 Core\Equipment.lua
