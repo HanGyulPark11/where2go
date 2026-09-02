@@ -1,22 +1,71 @@
 local panelFrame
+local contentFrame
+local cardFrames = {}
 
-local function AddRow(frame, y, text)
-    local line = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    line:SetPoint("TOPLEFT", 12, y)
-    line:SetJustifyH("LEFT")
-    line:SetWidth(336)
-    line:SetText(text)
+local function ClearCards()
+    for _, card in ipairs(cardFrames) do
+        card:Hide()
+        card:SetParent(nil)
+    end
+    cardFrames = {}
 end
 
-local function AddCardLine(frame, y, entry)
-    local text = string.format("%s   %d/%d  |cff9d9d9d(%s)|r",
-        entry.name, entry.targetCount, entry.poolSize, entry.recommendedLootSpec)
-    AddRow(frame, y, text)
+local function CreateCard(parent, y, result)
+    local card = CreateFrame("Frame", nil, parent)
+    card:SetPoint("TOPLEFT", 0, y)
+    card:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+
+    local headerText = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    headerText:SetPoint("TOPLEFT", 0, 0)
+    headerText:SetJustifyH("LEFT")
+    headerText:SetWidth(336)
+    local prefix = result.raidName and (result.raidName .. " - ") or ""
+    headerText:SetText(string.format("%s%s   %d/%d  |cff9d9d9d(%s %d/6)|r",
+        prefix, result.name, result.targetCount, result.eligibleCount, result.trackLabel, result.trackRank))
+
+    local rowY = -18
+    local itemNames = Where2GoDirectDrop.GetItemNames(result.targetItemIds)
+    for _, itemId in ipairs(result.targetItemIds) do
+        local row = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        row:SetPoint("TOPLEFT", 12, rowY)
+        row:SetJustifyH("LEFT")
+        row:SetWidth(324)
+        row:SetText(itemNames[itemId])
+        rowY = rowY - 14
+    end
+
+    card:SetHeight(-rowY + 4)
+    return card
+end
+
+local function RefreshContent()
+    ClearCards()
+
+    local results = Where2GoDirectDrop.GetRankedResults()
+    if not results then
+        local card = CreateFrame("Frame", nil, contentFrame)
+        card:SetPoint("TOPLEFT", 0, 0)
+        local text = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        text:SetPoint("TOPLEFT", 0, 0)
+        text:SetText("Where2Go: no specialization selected.")
+        card:SetHeight(18)
+        table.insert(cardFrames, card)
+        contentFrame:SetHeight(18)
+        return
+    end
+
+    local y = 0
+    for _, result in ipairs(results) do
+        local card = CreateCard(contentFrame, y, result)
+        table.insert(cardFrames, card)
+        y = y - card:GetHeight() - 6
+    end
+    contentFrame:SetHeight(-y)
 end
 
 local function CreatePanel()
     local frame = CreateFrame("Frame", "Where2GoPanel", UIParent, "BackdropTemplate")
-    frame:SetSize(380, 340)
+    frame:SetSize(380, 500)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -42,18 +91,9 @@ local function CreatePanel()
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(Where2GoConstants.ADDON_NAME)
 
-    local y = -40
-    AddRow(frame, y, "|cffffd200Mythic+|r")
-    y = y - 18
-    AddCardLine(frame, y, Where2GoFixtures.dungeon)
-    y = y - 24
-
-    AddRow(frame, y, "|cffffd200" .. Where2GoFixtures.raid.name .. "|r")
-    y = y - 18
-    for _, encounter in ipairs(Where2GoFixtures.raid.encounters) do
-        AddCardLine(frame, y, encounter)
-        y = y - 18
-    end
+    contentFrame = CreateFrame("Frame", nil, frame)
+    contentFrame:SetPoint("TOPLEFT", 12, -40)
+    contentFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
 
     frame:Hide()
     return frame
@@ -67,6 +107,7 @@ function Where2Go_TogglePanel()
     if panelFrame:IsShown() then
         panelFrame:Hide()
     else
+        RefreshContent()
         panelFrame:Show()
     end
 end
