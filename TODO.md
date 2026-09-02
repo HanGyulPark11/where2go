@@ -36,7 +36,21 @@
       then, do not assume the event fires; if it turns out not to,
       `docs/superpowers/specs/2026-09-02-phase4-voidcore-design.md`'s
       deferred tooltip-scanning approach becomes required.
-- [ ] Validate the first end-to-end recommendation in the live WoW client.
+- [x] Validate the first end-to-end recommendation in the live WoW client.
+      Confirmed during Phase 3's live checkpoint: real ranked, expandable
+      dungeon/boss cards rendered from actual `Sources.lua` data against
+      the player's live specialization, first result expanded by default.
+      Reconfirmed structurally (not just via the dev symlink) by Phase 5's
+      packaging sub-project, which loaded a real packaged zip in a
+      separate `AddOns` location successfully.
+
+Restart Checklist complete. `docs/DEVELOPMENT_PLAN.md`'s full Phase 1-5
+delivery sequence is now implemented and merged, including Phase 5's data
+refresh tooling (`tools/data-prep/`), lint checks (`tools/lint.ps1`), and
+packaging/release readiness (`tools/package.ps1`, `tools/smoke-test.ps1`,
+`docs/RELEASE_CHECKLIST.md`). The one open item carried over from above:
+`BONUS_ROLL_RESULT` firing for a real Voidcore roll is still unconfirmed
+(see the Voidcore item above) — report back once verified.
 
 Do not start a later item until the earlier item has a documented acceptance
 check and the preceding item is verified.
