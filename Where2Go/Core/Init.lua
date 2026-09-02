@@ -92,7 +92,7 @@ local function HandleCompareCommand()
                 anyFound = true
                 local candidateInfo = { ilvl = C_Item.GetDetailedItemLevelInfo(link), track = Where2GoEquipment.GetTrackInfo(link) }
                 local slotId = Where2GoEquipment.GetNormalizedSlot(itemId)
-                local equipped = slotId and Where2GoEquipment.GetBestEquipped(slotId) or { itemId = nil, ilvl = nil, track = nil }
+                local equipped = slotId and Where2GoEquipment.GetWeakestEquipped(slotId) or { itemId = nil, ilvl = nil, track = nil }
                 print(string.format("Where2Go [%s] %s: %s", purpose, link, DescribeCandidate(candidateInfo, equipped)))
             end
         end
@@ -103,6 +103,7 @@ local function HandleCompareCommand()
 end
 
 SLASH_WHERE2GO1 = "/where2go"
+SLASH_WHERE2GO2 = "/w2g"
 SlashCmdList["WHERE2GO"] = function(msg)
     local args = SplitArgs(msg)
     local subcommand = args[1]

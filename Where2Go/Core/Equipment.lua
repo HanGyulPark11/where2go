@@ -99,18 +99,24 @@ function Where2GoEquipment.GetEquipped(slotId)
     return { infoForInvSlotName(invSlot) }
 end
 
--- Best (highest track, then highest ilvl) equipped entry for a normalized
--- slot id -- the comparison baseline for FINGER/TRINKET's two physical
--- slots, and simply the one entry otherwise. Never returns nil.
-function Where2GoEquipment.GetBestEquipped(slotId)
+-- Weakest (most replaceable) equipped entry for a normalized slot id --
+-- the comparison baseline for FINGER/TRINKET's two physical slots (a
+-- candidate is judged against the one you'd actually swap out, not
+-- against the stronger of the pair you'd keep either way), and simply the
+-- one entry otherwise. An empty slot counts as the weakest possible entry,
+-- so it wins this comparison over any real item. Never returns nil.
+function Where2GoEquipment.GetWeakestEquipped(slotId)
     local entries = Where2GoEquipment.GetEquipped(slotId)
-    local best = { itemId = nil, ilvl = nil, track = nil }
-    for _, entry in ipairs(entries) do
-        if Where2GoCompare.IsBetterCandidate(entry, best) then
-            best = entry
+    if #entries == 0 then
+        return { itemId = nil, ilvl = nil, track = nil }
+    end
+    local weakest = entries[1]
+    for i = 2, #entries do
+        if Where2GoCompare.IsBetterCandidate(weakest, entries[i]) then
+            weakest = entries[i]
         end
     end
-    return best
+    return weakest
 end
 
 -- Which normalized slot a bare item ID belongs in, or nil if it isn't
