@@ -19,6 +19,7 @@ Read the following before restarting implementation:
 - `docs/DECISIONS.md` for product rules that have already been agreed.
 - `TODO.md` for the next planning and discovery tasks.
 - `docs/SEASON_CHECKLIST.md` for the season-changeover procedure.
+- `tools/LINT_README.md` for the Lua syntax/lint checking setup.
 
 ## Repository language
 

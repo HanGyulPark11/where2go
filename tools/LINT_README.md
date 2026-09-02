@@ -38,5 +38,7 @@ With a non-default luacheck location:
 .\tools\lint.ps1 -LuacheckPath "D:\somewhere\luacheck.exe"
 ```
 
-A clean run exits 0 with no output. Any warnings or errors luacheck finds
-print directly to the terminal with file:line references.
+A clean run exits 0 and prints a per-file `Checking <file> ... OK` line for
+each file plus a summary line showing zero warnings and errors (it is not
+silent). Any warnings or errors luacheck finds print directly to the
+terminal with file:line references.

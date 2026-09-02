@@ -10,9 +10,15 @@ if (-not (Test-Path $LuacheckPath)) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 
-$luaFiles = Get-ChildItem -Path (Join-Path $repoRoot "Where2Go") -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
-& $LuacheckPath $luaFiles
-$exitCode = $LASTEXITCODE
+try {
+    $luaFiles = Get-ChildItem -Path (Join-Path $repoRoot "Where2Go") -Recurse -File |
+        Where-Object { $_.Extension -eq ".lua" } |
+        ForEach-Object { $_.FullName.Substring($repoRoot.Length).TrimStart('\') }
+    & $LuacheckPath $luaFiles
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
 
-Pop-Location
 exit $exitCode
