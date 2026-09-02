@@ -2,6 +2,11 @@
 -- detection, live C_Item.GetItemSpecInfo eligibility, item name lookup,
 -- and calls Where2GoRanking.RankContent. WoW-API-dependent; not
 -- unit-tested (Where2GoRanking carries the pure ranking math this feeds).
+--
+-- BuildContentList/GetCurrentSpecIdAndName/IsEligibleForSpec are public
+-- (not local) so Core/VoidcoreDrop.lua can reuse them instead of
+-- duplicating the same content-assembly and spec-detection logic -- see
+-- docs/superpowers/specs/2026-09-02-phase4-voidcore-design.md.
 
 Where2GoDirectDrop = {}
 
@@ -15,7 +20,7 @@ local function FlattenItemIds(encounters)
     return ids
 end
 
-local function BuildContentList()
+function Where2GoDirectDrop.BuildContentList()
     local content = {}
 
     local mplusIlvl, mplusTrackLabel, mplusRank = Where2GoRaidRanks.GetMythicPlusIlvl()
@@ -51,7 +56,7 @@ local function BuildContentList()
     return content
 end
 
-local function GetCurrentSpecIdAndName()
+function Where2GoDirectDrop.GetCurrentSpecIdAndName()
     local specIndex = GetSpecialization()
     if not specIndex then
         return nil, nil
@@ -60,7 +65,7 @@ local function GetCurrentSpecIdAndName()
     return specId, specName
 end
 
-local function IsEligibleForSpec(specId)
+function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
         local specTable = C_Item.GetItemSpecInfo(itemId)
         -- C_Item.GetItemSpecInfo returning nil is ambiguous between "no
@@ -92,12 +97,12 @@ end
 -- the player has no specialization chosen. `results` is
 -- Where2GoRanking.RankContent's output, ranked best-first.
 function Where2GoDirectDrop.GetRankedResults()
-    local specId, specName = GetCurrentSpecIdAndName()
+    local specId, specName = Where2GoDirectDrop.GetCurrentSpecIdAndName()
     if not specId then
         return nil, "unsupported_spec"
     end
-    local content = BuildContentList()
-    local results = Where2GoRanking.RankContent(content, IsEligibleForSpec(specId), IsPreferred)
+    local content = Where2GoDirectDrop.BuildContentList()
+    local results = Where2GoRanking.RankContent(content, Where2GoDirectDrop.IsEligibleForSpec(specId), IsPreferred)
     return results, specName
 end
 
