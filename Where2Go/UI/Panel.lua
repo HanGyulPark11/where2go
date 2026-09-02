@@ -1,66 +1,106 @@
 local panelFrame
 local contentFrame
 local cardFrames = {}
+local Layout
 
-local function ClearCards()
-    for _, card in ipairs(cardFrames) do
-        card:Hide()
-        card:SetParent(nil)
-    end
-    cardFrames = {}
+local function BuildHeaderText(result, expanded)
+    local mark = expanded and "[-]" or "[+]"
+    local prefix = result.raidName and (result.raidName .. " - ") or ""
+    return string.format("%s %s%s   %d/%d  |cff9d9d9d(%s %d/6)|r",
+        mark, prefix, result.name, result.targetCount, result.eligibleCount, result.trackLabel, result.trackRank)
 end
 
-local function CreateCard(parent, y, result)
+local function CreateCard(parent, result)
     local card = CreateFrame("Frame", nil, parent)
-    card:SetPoint("TOPLEFT", 0, y)
+    card:SetPoint("LEFT", parent, "LEFT", 0, 0)
     card:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
 
-    local headerText = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    headerText:SetPoint("TOPLEFT", 0, 0)
+    local header = CreateFrame("Button", nil, card)
+    header:SetPoint("TOPLEFT", 0, 0)
+    header:SetPoint("RIGHT", card, "RIGHT", 0, 0)
+    header:SetHeight(18)
+
+    local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    headerText:SetPoint("LEFT", 0, 0)
     headerText:SetJustifyH("LEFT")
     headerText:SetWidth(336)
-    local prefix = result.raidName and (result.raidName .. " - ") or ""
-    headerText:SetText(string.format("%s%s   %d/%d  |cff9d9d9d(%s %d/6)|r",
-        prefix, result.name, result.targetCount, result.eligibleCount, result.trackLabel, result.trackRank))
 
-    local rowY = -18
+    local itemRows = {}
     local itemNames = Where2GoDirectDrop.GetItemNames(result.targetItemIds)
+    local rowY = -18
     for _, itemId in ipairs(result.targetItemIds) do
         local row = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         row:SetPoint("TOPLEFT", 12, rowY)
         row:SetJustifyH("LEFT")
         row:SetWidth(324)
         row:SetText(itemNames[itemId])
+        table.insert(itemRows, row)
         rowY = rowY - 14
     end
 
-    card:SetHeight(-rowY + 4)
-    return card
+    local cardData = {
+        frame = card,
+        expanded = true,
+        collapsedHeight = 18,
+        expandedHeight = 18 + (#itemRows * 14),
+    }
+    headerText:SetText(BuildHeaderText(result, cardData.expanded))
+
+    header:SetScript("OnClick", function()
+        cardData.expanded = not cardData.expanded
+        for _, row in ipairs(itemRows) do
+            if cardData.expanded then
+                row:Show()
+            else
+                row:Hide()
+            end
+        end
+        headerText:SetText(BuildHeaderText(result, cardData.expanded))
+        Layout()
+    end)
+
+    return cardData
+end
+
+Layout = function()
+    local y = 0
+    for _, cardData in ipairs(cardFrames) do
+        cardData.frame:ClearAllPoints()
+        cardData.frame:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, y)
+        cardData.frame:SetPoint("RIGHT", contentFrame, "RIGHT", 0, 0)
+        local height = cardData.expanded and cardData.expandedHeight or cardData.collapsedHeight
+        cardData.frame:SetHeight(height)
+        y = y - height - 6
+    end
+    local totalHeight = -y
+    contentFrame:SetHeight(totalHeight)
+    panelFrame:SetHeight(40 + totalHeight + 12)
 end
 
 local function RefreshContent()
-    ClearCards()
+    for _, cardData in ipairs(cardFrames) do
+        cardData.frame:Hide()
+        cardData.frame:SetParent(nil)
+    end
+    cardFrames = {}
 
     local results = Where2GoDirectDrop.GetRankedResults()
     if not results then
-        local card = CreateFrame("Frame", nil, contentFrame)
-        card:SetPoint("TOPLEFT", 0, 0)
-        local text = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local msgFrame = CreateFrame("Frame", nil, contentFrame)
+        msgFrame:SetPoint("TOPLEFT", 0, 0)
+        local text = msgFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         text:SetPoint("TOPLEFT", 0, 0)
         text:SetText("Where2Go: no specialization selected.")
-        card:SetHeight(18)
-        table.insert(cardFrames, card)
+        msgFrame:SetHeight(18)
         contentFrame:SetHeight(18)
+        panelFrame:SetHeight(40 + 18 + 12)
         return
     end
 
-    local y = 0
     for _, result in ipairs(results) do
-        local card = CreateCard(contentFrame, y, result)
-        table.insert(cardFrames, card)
-        y = y - card:GetHeight() - 6
+        table.insert(cardFrames, CreateCard(contentFrame, result))
     end
-    contentFrame:SetHeight(-y)
+    Layout()
 end
 
 local function CreatePanel()
