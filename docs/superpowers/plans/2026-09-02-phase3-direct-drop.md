@@ -1193,6 +1193,12 @@ result back before Phase 3 is considered done:
 6. `/where2go pref remove <itemID> drop` and reopen the panel — confirm
    the target count for that boss/dungeon returns to what it was before
    step 3.
+7. Immediately after a fresh `/reload` (cold item cache), open the panel
+   and note whether the ranking order looks unusually different from a
+   second open a minute or two later after browsing some items/tooltips
+   (which warms the client's item cache). A shift between the two is the
+   known, accepted cold-cache limitation described in the design spec's
+   out-of-scope list — not a bug to report, just something to be aware of.
 
 This satisfies `docs/DEVELOPMENT_PLAN.md` Phase 3's acceptance check
 (`ranking_spec.lua` already covers "a fixture with known pool sizes

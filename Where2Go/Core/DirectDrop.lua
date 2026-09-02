@@ -63,6 +63,15 @@ end
 local function IsEligibleForSpec(specId)
     return function(itemId)
         local specTable = C_Item.GetItemSpecInfo(itemId)
+        -- C_Item.GetItemSpecInfo returning nil is ambiguous between "no
+        -- spec restriction" and "not yet cached by the client" -- on a
+        -- cold item cache (e.g. right after login), this can inflate
+        -- eligibleCount and skew the ranking ratio until the cache warms
+        -- up naturally through normal play. Accepted as a known Phase 3
+        -- limitation; a proper fix would need
+        -- C_Item.RequestLoadItemDataByID + waiting for the item to
+        -- actually cache before ranking, which is real async-design work
+        -- deferred to a later phase.
         if not specTable then
             return true
         end

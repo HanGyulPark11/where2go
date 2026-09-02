@@ -217,3 +217,9 @@ tests/
 - Scrolling/pagination for a long card list.
 - Retrying/caching item name lookups that miss the client's cache on first
   request.
+- Handling a cold item cache in eligibility checks — `C_Item.GetItemSpecInfo`'s
+  nil return is ambiguous between "no restriction" and "not yet cached,"
+  which can transiently inflate a content entry's `eligibleCount` right
+  after login. Not fixed this phase; would need async cache-warming
+  (`C_Item.RequestLoadItemDataByID` + a cache-ready callback) before
+  ranking.
