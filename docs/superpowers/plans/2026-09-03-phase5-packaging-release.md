@@ -382,22 +382,29 @@ byte-accurate against the TOC. What remains is the one thing nothing in
 this session can do: confirming a real WoW client actually loads the
 packaged result. Whoever executes this task should:
 
+WoW reads addons from exactly one `AddOns` directory per install -- there
+is no separate `AddOns` folder it will also read from -- and it requires
+an addon's folder name to match its `.toc` filename exactly, so copying
+the extracted folder into `AddOns\` under a different name (e.g.
+`Where2GoPackageTest`) will NOT work: WoW simply won't list a
+mismatched-name folder as an addon at all. The procedure that actually
+works is a junction swap:
+
 1. Run `.\tools\package.ps1` to produce the current version's zip (if not
    already fresh from Task 2).
-2. Extract `dist\Where2Go-<version>.zip` into a *separate* location --
-   NOT over the existing `AddOns\Where2Go` dev junction. For example,
-   extract it to a temp folder, then copy the resulting `Where2Go` folder
-   into `AddOns\` under a different name temporarily (e.g.
-   `Where2GoPackageTest`), or briefly swap the junction for the real
-   extracted copy if that's easier -- whichever avoids ambiguity between
-   "the dev copy is what's loading" and "the packaged copy is what's
-   loading."
-3. Launch WoW (or `/reload` if already running with the swapped copy),
-   confirm no Lua errors appear.
+2. Rename or temporarily remove the existing `AddOns\Where2Go` junction
+   (confirmed via `Get-ChildItem <AddOns path> | Select-Object Name,
+   LinkType, Target` that it points at this repo's dev copy of
+   `Where2Go\`), then extract `dist\Where2Go-<version>.zip`'s `Where2Go`
+   folder into `AddOns\` under its real name (`Where2Go`) so it's the
+   actual folder, not a junction.
+3. Launch WoW (or `/reload` if already running), confirm no Lua errors
+   appear.
 4. Run `/where2go`, confirm the panel opens with both "Drop" and
    "Voidcore" tabs working as they do through the normal dev setup.
-5. Restore the original dev junction/setup afterward if it was changed
-   for this test.
+5. Delete the extracted test copy and restore the original dev junction
+   afterward. SavedVariables are keyed by addon name, so this
+   swap-and-restore is safe and does not lose any saved data.
 6. Report back: did it load cleanly, and were there any differences from
    the dev-junction experience?
 

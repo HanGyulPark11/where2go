@@ -23,13 +23,28 @@ either.
   environment (Cygwin/git-bash) on Windows; since this addon has zero
   external libraries and zero localization files (an explicit product
   decision — no Ace3/vendored libraries), a naive zip of the addon folder
-  produces an identical result to what the real packager would produce.
-  Reaching for the real tool now would add a dependency this addon
+  can produce a structurally equivalent result to what the real packager
+  would produce -- but only if the zip itself is spec-compliant. PowerShell's
+  built-in `Compress-Archive` is not: it stores backslash path separators in
+  zip entry names, which violates the ZIP spec and breaks spec-compliant
+  extractors (e.g. on macOS, or many addon managers). The packaging script
+  therefore shells out to Windows's bundled `tar.exe`, which writes
+  forward-slash entry names as the spec requires. Reaching for the real
+  BigWigsMods/packager tool now would add a dependency this addon
   structurally doesn't need yet.
 - **`.pkgmeta`**: added now as minimal, inert scaffolding (`package-as:
   Where2Go`) even though nothing consumes it yet — cheap to add, and gives
   a concrete anchor for "what changes when we wire up real CI later"
-  rather than a note buried in a doc.
+  rather than a note buried in a doc. Note this scaffolding is not yet
+  sufficient on its own: the real BigWigsMods/packager tool copies the
+  repo ROOT into the `package-as` folder, not a chosen subdirectory. Since
+  this addon's code lives in a `Where2Go/` subdirectory alongside `docs/`,
+  `tests/`, `tools/`, `README.md` at the repo root, a real packager run
+  today would nest the addon one level too deep
+  (`Where2Go/Where2Go/Where2Go.toc`). A future move to real CI-based
+  packaging will additionally need a `move-folders` (or `ignore`) key in
+  `.pkgmeta` to place `Where2Go/`'s contents at the package root — not
+  yet configured here.
 - **Version source of truth**: `Where2Go/Where2Go.toc`'s `## Version:`
   line. The packaging script only reads it; bumping it is a manual step in
   the release checklist, not something the script does automatically —
@@ -101,12 +116,18 @@ docs/RELEASE_CHECKLIST.md       NEW: full release procedure --
   CurseForge packaging step.
 - **`tools/package.ps1`** (new): reads `Where2Go/Where2Go.toc`, extracts
   the `## Version:` value, creates `dist/` if needed, and produces
-  `dist/Where2Go-<version>.zip` via `Compress-Archive` targeting the
-  `Where2Go/` folder directly (so the folder itself — not its contents
-  loose — becomes the zip's top-level entry, matching what a user expects
-  to drag into their `AddOns/` folder). Overwrites any existing zip for
-  the same version rather than erroring, since re-running after a fix
-  during the same release attempt is a normal workflow.
+  `dist/Where2Go-<version>.zip` via Windows's bundled `tar.exe` (not
+  `Compress-Archive`, which stores spec-violating backslash path
+  separators), `-C`'d into the repo root with an explicit list of the
+  addon's files (relative, forward-slash paths) rather than just the
+  `Where2Go` directory — passing the directory would make tar add extra
+  directory entries to the archive on top of the file entries. The listed
+  files' common `Where2Go/` prefix becomes the zip's effective top-level
+  folder (so extracting the zip anywhere yields a `Where2Go/` folder
+  ready to drop into an `AddOns/` folder, with spec-compliant
+  forward-slash entry names). Overwrites any existing zip for the same
+  version rather than erroring, since re-running after a fix during the
+  same release attempt is a normal workflow.
 - **`tools/smoke-test.ps1`** (new): takes a `-ZipPath` parameter (and an
   optional `-LuaPath` override matching this project's established
   external-tool-path-override convention from Sub-projects 1-2),
