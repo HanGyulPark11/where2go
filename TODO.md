@@ -22,7 +22,18 @@
 - [x] Add the direct-drop ranking engine with deterministic test fixtures.
       `Where2Go/Core/Ranking.lua` + `tests/ranking_spec.lua` (Phase 3),
       verified live in-client with real ranked, expandable cards.
-- [ ] Add the independent Voidcore ranking engine and history model.
+- [x] Add the independent Voidcore ranking engine and history model.
+      `Where2Go/Core/VoidcoreHistory.lua` + `Where2Go/Core/VoidcoreDrop.lua`
+      (Phase 4), tabbed panel and independence from Direct-drop confirmed
+      live in-client. One check remains open: whether `BONUS_ROLL_RESULT`
+      actually fires for the current Voidcore system has NOT been
+      confirmed yet — the player is saving their Voidcore for other use,
+      so the real-roll test in
+      `docs/superpowers/plans/2026-09-02-phase4-voidcore.md` (Task 6, step
+      5) is deferred until one is available to spend on testing. Until
+      then, do not assume the event fires; if it turns out not to,
+      `docs/superpowers/specs/2026-09-02-phase4-voidcore-design.md`'s
+      deferred tooltip-scanning approach becomes required.
 - [ ] Validate the first end-to-end recommendation in the live WoW client.
 
 Do not start a later item until the earlier item has a documented acceptance
