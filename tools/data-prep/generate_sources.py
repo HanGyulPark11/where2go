@@ -129,3 +129,43 @@ def render_lua(dungeons, raids):
     lines.append("}")
     lines.append("")
     return "\n".join(lines)
+
+
+def diff_against_current(new_content):
+    if os.path.exists(SOURCES_LUA_PATH):
+        with open(SOURCES_LUA_PATH, "r", encoding="utf-8") as f:
+            current_content = f.read()
+    else:
+        current_content = ""
+    diff = difflib.unified_diff(
+        current_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile="Where2Go/Core/Sources.lua (current)",
+        tofile="scratch/Sources.lua.new (generated)",
+    )
+    diff_text = "".join(diff)
+    print(diff_text if diff_text else "No differences from the current Sources.lua.")
+    return diff_text
+
+
+def main():
+    token = get_token()
+    dungeons = [fetch_instance(token, iid) for iid in SEASON_INSTANCES["dungeons"]]
+    raids = [fetch_instance(token, iid) for iid in SEASON_INSTANCES["raids"]]
+
+    check_structural_warnings("DUNGEONS", dungeons)
+    check_structural_warnings("RAIDS", raids)
+
+    new_content = render_lua(dungeons, raids)
+
+    os.makedirs(SCRATCH, exist_ok=True)
+    staged_path = os.path.join(SCRATCH, "Sources.lua.new")
+    with open(staged_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print(f"Staged output written to {staged_path}")
+
+    diff_against_current(new_content)
+
+
+if __name__ == "__main__":
+    main()
