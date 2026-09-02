@@ -55,6 +55,7 @@ local function CreatePanel()
         y = y - 18
     end
 
+    frame:Hide()
     return frame
 end
 
