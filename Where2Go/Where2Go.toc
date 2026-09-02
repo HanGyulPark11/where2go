@@ -1,0 +1,12 @@
+## Interface: 120100
+## Title: Where2Go
+## Notes: Recommends the most efficient next Mythic+ dungeon or raid encounter for a player's preferred items.
+## Author: HanGyulPark11
+## Version: 0.1.0
+## SavedVariables: Where2GoDB
+## SavedVariablesPerCharacter: Where2GoCharDB
+
+Core\Constants.lua
+Core\Fixtures.lua
+Core\Init.lua
+UI\Panel.lua
