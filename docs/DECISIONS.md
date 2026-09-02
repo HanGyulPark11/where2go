@@ -43,4 +43,11 @@ Voidcore reward changes that system's repeatable pool.
 
 The recommendation list is content-first. Each result is one expandable card
 that contains its content label, target/pool estimate, recommended loot
-specialization, and item rows. The first few recommendations open by default.
+specialization, and item rows.
+
+## 2026-09-02: Card default state (supersedes "first few open by default")
+
+All recommendation cards open by default, not just the first few. Decided
+during Phase 3 planning when the player found a partially-collapsed list
+harder to scan than a fully open one. Cards must still support collapsing
+individually -- this only changes the initial state.
