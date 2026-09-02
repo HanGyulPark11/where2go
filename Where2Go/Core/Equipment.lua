@@ -105,6 +105,19 @@ end
 -- against the stronger of the pair you'd keep either way), and simply the
 -- one entry otherwise. An empty slot counts as the weakest possible entry,
 -- so it wins this comparison over any real item. Never returns nil.
+--
+-- KNOWN LIMITATION (not yet handled -- revisit when Phase 3 builds the
+-- ranking engine): a Unique-Equipped item can only occupy one physical
+-- slot at a time, so when the candidate shares an item ID with one of the
+-- two currently-equipped entries, the correct baseline is that SAME
+-- equipped instance, not whichever of the pair is weakest. Example: Hero
+-- item A and Champion item B are equipped in the two trinket slots; a new,
+-- higher-track A drops. It can only ever replace the existing A (you can't
+-- wear two Unique-Equipped A's), so it should be compared against the
+-- equipped A specifically -- comparing against B (today's behavior, since
+-- B is weaker) can produce a misleading verdict. Fixing this needs an
+-- itemId-aware variant of this function that callers (Init.lua's
+-- HandleCompareCommand) pass the candidate's itemId into.
 function Where2GoEquipment.GetWeakestEquipped(slotId)
     local entries = Where2GoEquipment.GetEquipped(slotId)
     if #entries == 0 then
