@@ -13,6 +13,7 @@ Core\RaidRanks.lua
 Core\Ranking.lua
 Core\DirectDrop.lua
 Core\VoidcoreHistory.lua
+Core\VoidcoreDrop.lua
 Core\Compare.lua
 Core\Equipment.lua
 Core\Init.lua
