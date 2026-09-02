@@ -65,5 +65,6 @@ function Where2GoConstants.BuildDefaultCharDB()
             DROP = {},
             VOIDCORE = {},
         },
+        voidcoreObtainedItems = {},
     }
 end

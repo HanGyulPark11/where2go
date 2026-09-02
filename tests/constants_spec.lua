@@ -36,6 +36,8 @@ assert(type(charDB.preferredItems.DROP) == "table", "preferredItems.DROP should 
 assert(type(charDB.preferredItems.VOIDCORE) == "table", "preferredItems.VOIDCORE should default to a table")
 assert(next(charDB.preferredItems.DROP) == nil, "preferredItems.DROP should default to empty")
 assert(next(charDB.preferredItems.VOIDCORE) == nil, "preferredItems.VOIDCORE should default to empty")
+assert(type(charDB.voidcoreObtainedItems) == "table", "voidcoreObtainedItems should default to a table")
+assert(next(charDB.voidcoreObtainedItems) == nil, "voidcoreObtainedItems should default to empty")
 
 -- Regression guard: each call must return independent tables at every
 -- level. If the builder ever returns a shared table by reference, one
@@ -43,9 +45,12 @@ assert(next(charDB.preferredItems.VOIDCORE) == nil, "preferredItems.VOIDCORE sho
 local secondCharDB = Where2GoConstants.BuildDefaultCharDB()
 charDB.preferredItems.DROP[12345] = true
 charDB.preferredItems.VOIDCORE[54321] = true
+charDB.voidcoreObtainedItems[99999] = true
 assert(next(secondCharDB.preferredItems.DROP) == nil,
     "BuildDefaultCharDB must return an independent DROP table on each call")
 assert(next(secondCharDB.preferredItems.VOIDCORE) == nil,
     "BuildDefaultCharDB must return an independent VOIDCORE table on each call")
+assert(next(secondCharDB.voidcoreObtainedItems) == nil,
+    "BuildDefaultCharDB must return an independent voidcoreObtainedItems table on each call")
 
 print("constants_spec: OK")

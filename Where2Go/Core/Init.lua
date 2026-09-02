@@ -11,6 +11,7 @@ eventFrame:SetScript("OnEvent", function(self, event, loadedAddonName)
     Where2GoCharDB.preferredItems = Where2GoCharDB.preferredItems or {}
     Where2GoCharDB.preferredItems.DROP = Where2GoCharDB.preferredItems.DROP or {}
     Where2GoCharDB.preferredItems.VOIDCORE = Where2GoCharDB.preferredItems.VOIDCORE or {}
+    Where2GoCharDB.voidcoreObtainedItems = Where2GoCharDB.voidcoreObtainedItems or {}
 
     self:UnregisterEvent("ADDON_LOADED")
 end)
