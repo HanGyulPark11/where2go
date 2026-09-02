@@ -2,6 +2,7 @@ local specs = {
     "tests/constants_spec.lua",
     "tests/fixtures_spec.lua",
     "tests/toc_spec.lua",
+    "tests/tracks_spec.lua",
 }
 
 local failureCount = 0
