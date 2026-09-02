@@ -174,9 +174,11 @@ docs/
 
 ## Error handling
 
-- Missing/invalid `BLIZZARD_CLIENT_ID`/`BLIZZARD_CLIENT_SECRET`: the OAuth
-  request fails with an HTTP error from Battle.net; the script lets this
-  propagate as an uncaught exception rather than catching and
+- Missing `BLIZZARD_CLIENT_ID`/`BLIZZARD_CLIENT_SECRET`: `os.environ[...]`
+  raises an uncaught `KeyError` naming the missing variable before any
+  network request is made. Invalid (wrong but present) credentials instead
+  reach Battle.net and fail the OAuth request with an HTTP error. Either
+  way the script lets the exception propagate rather than catching and
   re-wrapping it — the underlying error message is already clear enough.
 - Wrong/decommissioned instance ID in `SEASON_INSTANCES`: the Journal API
   returns 404; same uncaught-exception behavior, with the failing

@@ -19,7 +19,7 @@ IDs (the API has no "current season" endpoint — look these up by hand).
 Then, from the repo root:
 
 ```
-BLIZZARD_CLIENT_ID=<your id> BLIZZARD_CLIENT_SECRET=<your secret> python tools/data-prep/generate_sources.py
+$env:BLIZZARD_CLIENT_ID="<your id>"; $env:BLIZZARD_CLIENT_SECRET="<your secret>"; python tools/data-prep/generate_sources.py
 ```
 
 Review the printed diff. If it looks correct, copy

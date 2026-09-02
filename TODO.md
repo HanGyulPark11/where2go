@@ -12,7 +12,9 @@
       and item-pool data. Real per-dungeon/per-boss item pools ported from
       `codex/pre-restart-backup`'s Battle.net-Journal-API-generated data
       (Phase 3, `Where2Go/Core/Sources.lua`). Refresh procedure (re-running
-      the same generation process each season) is still open for Phase 5.
+      the same generation process each season) is now implemented in Phase
+      5 via `tools/data-prep/generate_sources.py` and
+      `docs/SEASON_CHECKLIST.md`.
 - [x] Create a thin addon shell that can render a static recommendation card.
       Verified live in-client (Phase 1). Deviates from "in the Dungeon and
       Raid Finder": renders in a standalone frame instead, to avoid

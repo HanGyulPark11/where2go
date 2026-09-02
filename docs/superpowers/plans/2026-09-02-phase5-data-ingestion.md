@@ -565,9 +565,9 @@ ever appearing in a transcript). Whoever executes this task should run it
 themselves, in their own terminal, and report the result back:
 
 1. In your own terminal (not through the assistant), `cd` to the repo
-   root and run:
+   root and run (PowerShell):
    ```
-   BLIZZARD_CLIENT_ID=<your id> BLIZZARD_CLIENT_SECRET=<your secret> python tools/data-prep/generate_sources.py
+   $env:BLIZZARD_CLIENT_ID="<your id>"; $env:BLIZZARD_CLIENT_SECRET="<your secret>"; python tools/data-prep/generate_sources.py
    ```
 2. Confirm the script completes without an uncaught exception.
 3. Read the structural warnings (if any) printed above the diff — none

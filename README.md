@@ -18,6 +18,7 @@ Read the following before restarting implementation:
 - `docs/DEVELOPMENT_PLAN.md` for scope, delivery order, and acceptance checks.
 - `docs/DECISIONS.md` for product rules that have already been agreed.
 - `TODO.md` for the next planning and discovery tasks.
+- `docs/SEASON_CHECKLIST.md` for the season-changeover procedure.
 
 ## Repository language
 
