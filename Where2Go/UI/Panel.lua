@@ -6,8 +6,9 @@ local Layout
 local function BuildHeaderText(result, expanded)
     local mark = expanded and "[-]" or "[+]"
     local prefix = result.raidName and (result.raidName .. " - ") or ""
-    return string.format("%s %s%s   %d/%d  |cff9d9d9d(%s %d/6)|r",
-        mark, prefix, result.name, result.targetCount, result.eligibleCount, result.trackLabel, result.trackRank)
+    return string.format("%s %s%s   %d/%d  |cffffffff%d|r |cff9d9d9d(%s %d/6)|r",
+        mark, prefix, result.name, result.targetCount, result.eligibleCount,
+        result.ilvl, result.trackLabel, result.trackRank)
 end
 
 local function CreateCard(parent, result)
