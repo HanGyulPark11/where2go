@@ -3,6 +3,7 @@ local specs = {
     "tests/fixtures_spec.lua",
     "tests/toc_spec.lua",
     "tests/tracks_spec.lua",
+    "tests/compare_spec.lua",
 }
 
 local failureCount = 0
