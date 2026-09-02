@@ -66,10 +66,12 @@ tests/                           (repo root — dev-only, not shipped in the add
   registers `/where2go` to toggle the panel. Guards its `ADDON_LOADED`
   handler to only act when the event's `addonName` argument is `"Where2Go"`.
 - **`UI/Panel.lua`**: a `CreateFrame`-based standalone, movable frame with a
-  close button. Renders the fixture data in the card shape defined by
-  `docs/DECISIONS.md` (content label, target/pool estimate, recommended loot
-  spec, item rows) using the fixture's placeholder numbers — real ranking
-  math is Phase 3 scope, not Phase 1.
+  close button. Renders the fixture data as one compact line per
+  dungeon/encounter (content label, target/pool estimate, recommended loot
+  spec) using the fixture's placeholder numbers. Item-row rendering is out
+  of scope here — `docs/DEVELOPMENT_PLAN.md` places full item-row rendering
+  in Phase 3 alongside real ranking math, and this spec's earlier wording
+  overstated Phase 1's rendering scope.
 
 ## Data flow
 
