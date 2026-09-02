@@ -838,16 +838,46 @@ result back before Phase 4 is considered done:
    shows a non-zero target count on the Voidcore tab, while the Drop tab
    (unaffected, since it's a different preferred list) does not show it
    as a target unless you separately added it there too.
-5. Simulate obtaining that item via Voidcore (a real bonus roll is the
-   most faithful test if you have one available; otherwise, directly set
-   `Where2GoCharDB.voidcoreObtainedItems[<itemID>] = true` via `/run` and
-   reopen the panel) — confirm the item drops out of the Voidcore tab's
-   target count and item list for that card, while the Drop tab's ranking
-   for the same content is completely unaffected (this is the core
-   acceptance check: "adding a known Voidcore reward changes only the
-   Voidcore result for its relevant pool").
-6. Click back and forth between the two tabs a few times — confirm no
+5. **Required — a real Voidcore bonus roll, not a substitute.** This is
+   the one thing nothing else in this phase can verify: whether
+   `BONUS_ROLL_RESULT` actually fires for the current Voidcore system the
+   way `Core/VoidcoreHistory.lua` assumes (the event pattern was ported
+   from an older implementation branch, not observed against the live
+   Voidcore feature — and the real `VoidcoreAdvisor` addon chose a much
+   more expensive tooltip-scanning approach instead of this simple event
+   hook, which is at least a hint the event might not behave as assumed).
+   Before spending a Voidcore, run `/dump Where2GoCharDB.voidcoreObtainedItems`
+   and note the result. Spend a real Voidcore bonus roll and receive an
+   item. Run `/dump Where2GoCharDB.voidcoreObtainedItems` again — confirm
+   the obtained item's ID is now a key in the table. If it did NOT appear:
+   temporarily add `print(event, typeIdentifier, itemLink)` as the first
+   line inside `VoidcoreHistory.lua`'s `OnEvent` handler (before the
+   `typeIdentifier` check), spend another Voidcore, and report exactly
+   what printed — this distinguishes "the event never fires" from "it
+   fires with a different payload shape than expected" (e.g. a bare item
+   ID instead of a link, which `ParseItemIdFromLink`'s string-only guard
+   would silently swallow as `nil`). Either failure mode means
+   `docs/superpowers/specs/2026-09-02-phase4-voidcore-design.md`'s
+   deferred tooltip-scanning alternative needs to be promoted from
+   "later phase" to "required," which should be reported back rather
+   than worked around.
+6. **Then, separately, confirm the exclusion logic itself** (this can use
+   the manual shortcut, since step 5 already covers the real-event
+   question): with the item obtained per step 5 (or, if step 5's real
+   roll used a different item than step 4 registered, directly set
+   `Where2GoCharDB.voidcoreObtainedItems[<itemID>] = true` via `/run` for
+   the specific item you registered in step 4) and reopen the panel —
+   confirm the item drops out of the Voidcore tab's target count and item
+   list for that card, while the Drop tab's ranking for the same content
+   is completely unaffected (this is the core acceptance check: "adding a
+   known Voidcore reward changes only the Voidcore result for its
+   relevant pool").
+7. Click back and forth between the two tabs a few times — confirm no
    Lua error, no leftover cards from the other tab lingering underneath.
+   Note: `currentView` is not reset when the panel closes and there is no
+   visual highlight on the active tab yet (a known, deferred-to-Phase-5
+   polish item) — if you lose track of which tab you're looking at,
+   re-click the tab you intend to check rather than relying on memory.
 
 This satisfies `docs/DEVELOPMENT_PLAN.md` Phase 4's acceptance check.
 
