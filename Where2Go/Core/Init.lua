@@ -8,6 +8,10 @@ eventFrame:SetScript("OnEvent", function(self, event, loadedAddonName)
     Where2GoDB = Where2GoDB or Where2GoConstants.BuildDefaultAccountDB()
     Where2GoCharDB = Where2GoCharDB or Where2GoConstants.BuildDefaultCharDB()
 
+    Where2GoCharDB.preferredItems = Where2GoCharDB.preferredItems or {}
+    Where2GoCharDB.preferredItems.DROP = Where2GoCharDB.preferredItems.DROP or {}
+    Where2GoCharDB.preferredItems.VOIDCORE = Where2GoCharDB.preferredItems.VOIDCORE or {}
+
     self:UnregisterEvent("ADDON_LOADED")
 end)
 
