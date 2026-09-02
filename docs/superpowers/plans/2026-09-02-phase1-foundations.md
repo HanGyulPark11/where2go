@@ -16,7 +16,7 @@
 - Addon identifier is `Where2Go` everywhere: folder name, TOC `Title`, and the `Where2GoDB` / `Where2GoCharDB` SavedVariables names.
 - No Ace3, no vendored third-party libraries — plain FrameXML/Lua only.
 - `Core/Constants.lua` and `Core/Fixtures.lua` must never reference WoW API globals (`CreateFrame`, `C_*`, event names, etc.) — that's what keeps them testable with a standalone `lua` interpreter.
-- Tests run via `lua tests/run_tests.lua` from the repository root (not the `Where2Go/` addon folder).
+- Tests run via `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua` from the repository root (not the `Where2Go/` addon folder). Corrected during Task 1 (see ledger): the `choco install lua51` package installs a binary named `lua5.1.exe`, not `lua.exe`, and does not create a `lua` alias — the plan originally assumed the bare `lua` command. Additionally, this coding session's own shell processes were started before the install and do not pick up the updated `PATH` — every task in this plan invokes the interpreter by its full path rather than relying on `PATH` resolution. A genuinely fresh terminal window (e.g. one the human partner opens later) will have `lua5.1` on `PATH` and can use the short form.
 - Source code, comments, and commit messages are English (per `README.md`'s repository language rule). Player-facing strings (fixture display names, panel labels) may be Korean.
 - The panel is a standalone frame — it must not anchor into or mutate any Blizzard frame (e.g. `PVEFrame`, `EncounterJournal`).
 - Lua's `assert()`/`error()` prepend a `file:line:` prefix to string error messages. Every `[FAIL] ...: <message>` line shown as "Expected" output below will actually appear with that prefix (e.g. `tests/toc_spec.lua:12: could not open ...`) — that prefix is normal and doesn't indicate anything is wrong; match on the message content, not the exact string.
@@ -59,7 +59,7 @@ Run: `choco install lua51 -y`
 
 - [ ] **Step 2: Verify the interpreter is on PATH and is 5.1**
 
-Run: `lua -v`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" -v`
 Expected: output starts with `Lua 5.1`
 
 - [ ] **Step 3: Create the test harness**
@@ -90,7 +90,7 @@ end
 
 - [ ] **Step 4: Run the empty harness to confirm it works end to end**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected:
 ```
 0 spec file(s), 0 failure(s)
@@ -164,7 +164,7 @@ local specs = {
 
 - [ ] **Step 3: Run and verify it fails**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected: `[FAIL] tests/constants_spec.lua: ...` (the require'd file doesn't exist yet), exit code `1`.
 
 - [ ] **Step 4: Implement Constants.lua**
@@ -192,7 +192,7 @@ end
 
 - [ ] **Step 5: Run and verify it passes**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected:
 ```
 [PASS] tests/constants_spec.lua
@@ -278,7 +278,7 @@ local specs = {
 
 - [ ] **Step 3: Run and verify it fails**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected: `[FAIL] tests/fixtures_spec.lua: ...`, exit code `1`.
 
 - [ ] **Step 4: Implement Fixtures.lua**
@@ -327,7 +327,7 @@ Where2GoFixtures = {
 
 - [ ] **Step 5: Run and verify it passes**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected:
 ```
 [PASS] tests/constants_spec.lua
@@ -407,7 +407,7 @@ local specs = {
 
 - [ ] **Step 3: Run and verify it fails**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected: `[FAIL] tests/toc_spec.lua: could not open Where2Go/Where2Go.toc`, exit code `1`.
 
 - [ ] **Step 4: Create the manifest**
@@ -432,7 +432,7 @@ Note: this step references `Core\Init.lua` and `UI\Panel.lua`, which don't exist
 
 - [ ] **Step 5: Run and verify it still fails on the not-yet-created files**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected: `[FAIL] tests/toc_spec.lua: toc references Core\Init.lua but no file was found at Where2Go/Core/Init.lua`, exit code `1`. This confirms the check is real (Steps 1-4 alone don't satisfy it) — Task 5 and Task 6 close the gap.
 
 - [ ] **Step 6: Commit**
@@ -480,7 +480,7 @@ end
 
 - [ ] **Step 2: Run the automated suite to confirm nothing regressed**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected: `toc_spec` still fails (Step 5 of Task 4's expectation), now on `UI\Panel.lua` specifically:
 ```
 [FAIL] tests/toc_spec.lua: toc references UI\Panel.lua but no file was found at Where2Go/UI/Panel.lua
@@ -584,7 +584,7 @@ end
 
 - [ ] **Step 2: Run the full automated suite**
 
-Run: `lua tests/run_tests.lua`
+Run: `"C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua`
 Expected:
 ```
 [PASS] tests/constants_spec.lua
