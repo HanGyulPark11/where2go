@@ -4,14 +4,18 @@
 -- * dungeon: a placeholder name. The season's real Mythic+ dungeon pool is
 --   an open decision (see TODO.md) -- any dungeon works for Phase 1 since
 --   this only verifies the panel's rendering shape.
--- * raid: "The Venomous Abyss" and its 9 encounters, sourced from
+-- * raid: "The Venomous Abyss" (raid title, sourced from a prior where2go
+--   session's research -- see ai/vault/raw/2026-09-01-where2go-blizzard-addon-api-findings.md)
+--   and its 9 encounters (sourced from
 --   ai/vault/wiki/midnight-season2-raid.md, which is itself built from an
---   automated transcript of a pre-release Mythic test stream (patch 12.1).
+--   automated transcript of a pre-release Mythic test stream, patch 12.1).
 --   Treat encounter names as a snapshot, not confirmed Encounter Journal
 --   data -- Phase 5 replaces this with a real seasonal data source.
 -- * poolSize / targetCount / recommendedLootSpec / items are ALL
 --   placeholder values so the panel has something to render. Phase 3
 --   computes real pool/target numbers; Phase 5 sources real item pools.
+-- * items on each card are staged for Phase 3's item-row rendering --
+--   Phase 1's UI/Panel.lua does not read this field yet.
 
 Where2GoFixtures = {
     dungeon = {
