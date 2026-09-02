@@ -1,5 +1,6 @@
 local specs = {
     "tests/constants_spec.lua",
+    "tests/fixtures_spec.lua",
 }
 
 local failureCount = 0
