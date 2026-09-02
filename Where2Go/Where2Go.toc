@@ -10,5 +10,6 @@ Core\Constants.lua
 Core\Tracks.lua
 Core\Fixtures.lua
 Core\Compare.lua
+Core\Equipment.lua
 Core\Init.lua
 UI\Panel.lua
