@@ -28,7 +28,18 @@ earlier ones are done.
    the generator's own header does not carry forward every note from the
    committed file automatically.
 
-4. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
+4. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
+   updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
+   needs regenerating too. See `tools/data-prep/README.md` for credential
+   setup (same as step 2). From the repo root:
+   ```
+   $env:BLIZZARD_CLIENT_ID="<id>"; $env:BLIZZARD_CLIENT_SECRET="<secret>"; python tools/data-prep/generate_item_stats.py
+   ```
+   Review the printed diff. If it looks correct, copy
+   `tools/data-prep/scratch/ItemStats.lua.new`'s content into
+   `Where2Go/Core/ItemStats.lua`.
+
+5. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
    no API equivalent. For the new raid, determine each boss's relative
    item-level rank (1-4) and whether any boss drops a special
    above-normal-cap track (like Season 2's Myth-9/6 final bosses), the
@@ -42,28 +53,28 @@ earlier ones are done.
    in-client measurement) still holds, and update those two by hand if
    not.
 
-5. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
+6. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
    bonus ID ranges (Veteran/Champion/Hero/Myth) changed this season —
    Blizzard sometimes shifts these between seasons. Also check each
    track's `ilvls = { ... }` array (the per-rank item levels), which
    changes essentially every season. Update by hand if so.
 
-6. **Update `Where2GoConstants.SEASON_LABEL`.** In
+7. **Update `Where2GoConstants.SEASON_LABEL`.** In
    `Where2Go/Core/Constants.lua`, update the `SEASON_LABEL` string (e.g.
    `"Midnight Season 2"`) to name the new season. This is a simple
    hand-edit, like the `RaidRanks.lua`/`Tracks.lua` steps above — there is
    no API for it.
 
-7. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
+8. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
    check near the bottom of the file (currently asserting `RAIDS[2]` is
    "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
    Replace it with an equivalent spot-check for the new season's actual
    raid content, or remove it if no longer meaningful.
 
-8. **Run the full test suite and commit.**
+9. **Run the full test suite and commit.**
    ```
    "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
    ```
    Confirm all specs pass before committing the updated `Sources.lua`,
-   `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`, and `sources_spec.lua`
-   together.
+   `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`, and
+   `sources_spec.lua` together.

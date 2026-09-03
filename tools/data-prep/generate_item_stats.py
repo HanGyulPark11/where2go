@@ -11,7 +11,6 @@ See docs/SEASON_CHECKLIST.md for the full season-changeover procedure.
 """
 
 import difflib
-import json
 import os
 import re
 import sys
