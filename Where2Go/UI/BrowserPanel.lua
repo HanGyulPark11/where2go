@@ -84,12 +84,6 @@ local function CreateToggleButtonRow(parent, values, labelFn, onSelect)
     return buttons
 end
 
--- Task 3 Step 1 reassigns this to also refresh the visible rows.
-RebuildFilteredResults = function()
-    local unsorted = Where2GoItemBrowser.FilterItems(itemPool, filters, BuildContext())
-    filteredResults = Where2GoItemBrowser.SortItems(unsorted, nil, BuildContext())
-end
-
 local function RebuildBossButtons(parent, dungeonOrRaid)
     for _, btn in pairs(bossButtons) do
         btn:Hide()
@@ -108,6 +102,46 @@ local function RebuildBossButtons(parent, dungeonOrRaid)
         RebuildFilteredResults()
     end)
     RebuildFilteredResults()
+end
+
+local ROW_HEIGHT = 20
+local VISIBLE_ROWS = 12
+local resultRows = {}
+local scrollOffset = 0
+
+local function ClampScrollOffset()
+    local maxOffset = math.max(0, #filteredResults - VISIBLE_ROWS)
+    if scrollOffset < 0 then
+        scrollOffset = 0
+    elseif scrollOffset > maxOffset then
+        scrollOffset = maxOffset
+    end
+end
+
+local function RefreshVisibleRows()
+    for i = 1, VISIBLE_ROWS do
+        local row = resultRows[i]
+        local entry = filteredResults[scrollOffset + i]
+        if entry and row then
+            row:Show()
+            row.entry = entry
+            local prefix = entry.raidName and (entry.raidName .. " - ") or ""
+            local name = GetItemName(entry.itemId) or ("Item #" .. entry.itemId)
+            local preferredMark = IsPreferred(entry.itemId) and "|cff00ff00[preferred]|r " or ""
+            row.text:SetText(preferredMark .. prefix .. entry.contentName .. " / " .. entry.bossName .. ": " .. name)
+            row.checkbox:SetChecked(stagedSelection[entry.itemId] == true)
+        elseif row then
+            row:Hide()
+            row.entry = nil
+        end
+    end
+end
+
+RebuildFilteredResults = function()
+    local unsorted = Where2GoItemBrowser.FilterItems(itemPool, filters, BuildContext())
+    filteredResults = Where2GoItemBrowser.SortItems(unsorted, nil, BuildContext())
+    ClampScrollOffset()
+    RefreshVisibleRows()
 end
 
 local function CreateBrowserPanel()
@@ -247,9 +281,116 @@ local function CreateBrowserPanel()
         RebuildFilteredResults()
     end)
 
+    local listFrame = CreateFrame("Frame", nil, frame)
+    listFrame:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -12)
+    listFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    listFrame:SetHeight(VISIBLE_ROWS * ROW_HEIGHT)
+    listFrame:EnableMouseWheel(true)
+    listFrame:SetScript("OnMouseWheel", function(self, delta)
+        scrollOffset = scrollOffset - delta
+        ClampScrollOffset()
+        RefreshVisibleRows()
+    end)
+
+    for i = 1, VISIBLE_ROWS do
+        local row = CreateFrame("Frame", nil, listFrame)
+        row:SetHeight(ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
+        row:SetPoint("RIGHT", listFrame, "RIGHT", 0, 0)
+
+        local checkbox = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        checkbox:SetSize(20, 20)
+        checkbox:SetPoint("LEFT", 0, 0)
+        checkbox:SetScript("OnClick", function(self)
+            local r = self:GetParent()
+            if r.entry then
+                if self:GetChecked() then
+                    stagedSelection[r.entry.itemId] = true
+                else
+                    stagedSelection[r.entry.itemId] = nil
+                end
+            end
+        end)
+
+        local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        text:SetPoint("LEFT", checkbox, "RIGHT", 4, 0)
+        text:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        text:SetJustifyH("LEFT")
+
+        row.checkbox = checkbox
+        row.text = text
+        resultRows[i] = row
+    end
+
+    local addSelectedButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    addSelectedButton:SetSize(140, 22)
+    addSelectedButton:SetPoint("TOPLEFT", listFrame, "BOTTOMLEFT", 4, -12)
+    addSelectedButton:SetText("Add selected")
+    addSelectedButton:SetScript("OnClick", function()
+        for itemId in pairs(stagedSelection) do
+            Where2GoCharDB.preferredItems[currentMode][itemId] = true
+        end
+        stagedSelection = {}
+        RebuildFilteredResults()
+    end)
+
+    local clearSelectionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearSelectionButton:SetSize(140, 22)
+    clearSelectionButton:SetPoint("LEFT", addSelectedButton, "RIGHT", 8, 0)
+    clearSelectionButton:SetText("Clear selection")
+    clearSelectionButton:SetScript("OnClick", function()
+        stagedSelection = {}
+        RefreshVisibleRows()
+    end)
+
+    local clearPreferredButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearPreferredButton:SetSize(160, 22)
+    clearPreferredButton:SetPoint("LEFT", clearSelectionButton, "RIGHT", 8, 0)
+    clearPreferredButton:SetText("Clear preferred list")
+    clearPreferredButton:SetScript("OnClick", function()
+        StaticPopup_Show("WHERE2GO_CLEAR_PREFERRED")
+    end)
+
     frame.dungeonRow = dungeonRow
     frame.bossRow = bossRow
     frame.searchBox = searchBox
     frame:Hide()
     return frame
+end
+
+StaticPopupDialogs["WHERE2GO_CLEAR_PREFERRED"] = {
+    text = "Remove every preferred item from the current list?",
+    button1 = "Clear",
+    button2 = "Cancel",
+    OnAccept = function()
+        Where2GoCharDB.preferredItems[currentMode] = {}
+        RebuildFilteredResults()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+Where2GoBrowserPanel = {}
+
+function Where2GoBrowserPanel.Toggle()
+    if not browserFrame then
+        browserFrame = CreateBrowserPanel()
+        itemPool = Where2GoItemBrowser.BuildItemPool()
+        for _, entry in ipairs(itemPool) do
+            C_Item.RequestLoadItemDataByID(entry.itemId)
+        end
+        local itemLoadWatcher = CreateFrame("Frame")
+        itemLoadWatcher:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+        itemLoadWatcher:SetScript("OnEvent", function()
+            RebuildFilteredResults()
+        end)
+        RebuildFilteredResults()
+    end
+    if browserFrame:IsShown() then
+        browserFrame:Hide()
+    else
+        browserFrame:Show()
+    end
 end
