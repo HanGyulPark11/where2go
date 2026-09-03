@@ -174,61 +174,67 @@ ScanStep = function()
         return
     end
 
-    if _state.specIdx > #_state.specs then
-        FinalizeScan()
-        return
-    end
-
-    local specEntry = _state.specs[_state.specIdx]
-    local voidcacheItemId = _state.items[_state.itemIdx]
-
-    -- Switch loot spec once at the start of each spec's pass (first
-    -- item, no retries yet), then wait for it to take effect.
-    -- expectingSpecChange tells the PLAYER_LOOT_SPEC_UPDATED handler
-    -- below that this particular change came from the scan itself, not
-    -- the player manually changing loot spec mid-scan (which would
-    -- otherwise silently attribute the rest of this pass's tooltip
-    -- reads to the wrong spec).
-    if _state.itemIdx == 1 and _state.retries == 0 and not _state.specSwitchDone then
-        _state.expectingSpecChange = true
-        SetLootSpecialization(specEntry.specId)
-        _state.specSwitchDone = true
-        C_Timer.After(SPEC_CHANGE_DELAY, ScanStep)
-        return
-    end
-    _state.expectingSpecChange = false
-
-    local tooltipData = C_TooltipInfo.GetItemByID(voidcacheItemId)
-    local lines = tooltipData and tooltipData.lines
-    local parsed = Where2GoSpecEligibilityScan.ParseTooltipLines(lines)
-
-    if not parsed then
-        _state.retries = _state.retries + 1
-        if _state.retries <= MAX_RETRIES then
-            C_Timer.After(RETRY_DELAY, ScanStep)
+    local ok, err = pcall(function()
+        if _state.specIdx > #_state.specs then
+            FinalizeScan()
             return
         end
-        parsed = {}
+
+        local specEntry = _state.specs[_state.specIdx]
+        local voidcacheItemId = _state.items[_state.itemIdx]
+
+        -- Switch loot spec once at the start of each spec's pass (first
+        -- item, no retries yet), then wait for it to take effect.
+        -- expectingSpecChange tells the PLAYER_LOOT_SPEC_UPDATED handler
+        -- below that this particular change came from the scan itself, not
+        -- the player manually changing loot spec mid-scan (which would
+        -- otherwise silently attribute the rest of this pass's tooltip
+        -- reads to the wrong spec).
+        if _state.itemIdx == 1 and _state.retries == 0 and not _state.specSwitchDone then
+            _state.expectingSpecChange = true
+            SetLootSpecialization(specEntry.specId)
+            _state.specSwitchDone = true
+            C_Timer.After(SPEC_CHANGE_DELAY, ScanStep)
+            return
+        end
+        _state.expectingSpecChange = false
+
+        local tooltipData = C_TooltipInfo.GetItemByID(voidcacheItemId)
+        local lines = tooltipData and tooltipData.lines
+        local parsed = Where2GoSpecEligibilityScan.ParseTooltipLines(lines)
+
+        if not parsed then
+            _state.retries = _state.retries + 1
+            if _state.retries <= MAX_RETRIES then
+                C_Timer.After(RETRY_DELAY, ScanStep)
+                return
+            end
+            parsed = {}
+        end
+
+        local specNames = _state.results[specEntry.specId] or {}
+        for name in pairs(parsed) do
+            specNames[name] = true
+        end
+        _state.results[specEntry.specId] = specNames
+
+        _state.retries = 0
+        _state.itemIdx = _state.itemIdx + 1
+        if _state.itemIdx > #_state.items then
+            _state.itemIdx = 1
+            _state.specIdx = _state.specIdx + 1
+            _state.specSwitchDone = false
+        end
+
+        local completedSteps = (_state.specIdx - 1) * #_state.items + (_state.itemIdx == 1 and 0 or _state.itemIdx - 1)
+        NotifyProgress(specEntry.specName, completedSteps, #_state.specs * #_state.items, nil)
+
+        C_Timer.After(STEP_DELAY, ScanStep)
+    end)
+
+    if not ok then
+        AbortScan("ABORTED_ERROR")
     end
-
-    local specNames = _state.results[specEntry.specId] or {}
-    for name in pairs(parsed) do
-        specNames[name] = true
-    end
-    _state.results[specEntry.specId] = specNames
-
-    _state.retries = 0
-    _state.itemIdx = _state.itemIdx + 1
-    if _state.itemIdx > #_state.items then
-        _state.itemIdx = 1
-        _state.specIdx = _state.specIdx + 1
-        _state.specSwitchDone = false
-    end
-
-    local completedSteps = (_state.specIdx - 1) * #_state.items + (_state.itemIdx == 1 and 0 or _state.itemIdx - 1)
-    NotifyProgress(specEntry.specName, completedSteps, #_state.specs * #_state.items, nil)
-
-    C_Timer.After(STEP_DELAY, ScanStep)
 end
 
 function Where2GoSpecEligibilityScan.Start()
