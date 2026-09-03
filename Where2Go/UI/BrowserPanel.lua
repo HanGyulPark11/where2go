@@ -4,6 +4,7 @@ local itemPool
 local filters = { dungeonName = nil, bossName = nil, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil, specId = nil }
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
+local scanStatusText
 
 -- Forward declaration (same pattern UI/Panel.lua uses for `Layout`):
 -- Task 2 Step 3 assigns a filter-only stub; Task 3 Step 1 replaces that
@@ -183,6 +184,12 @@ local function CreateBrowserPanel()
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText("Where2Go - Item Browser")
+
+    scanStatusText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    scanStatusText:SetPoint("BOTTOMLEFT", 6, 6)
+    scanStatusText:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
+    scanStatusText:SetJustifyH("LEFT")
+    scanStatusText:SetText("")
 
     -- Drop/Voidcore mode toggle
     local dropButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -432,6 +439,15 @@ StaticPopupDialogs["WHERE2GO_CLEAR_PREFERRED"] = {
     preferredIndex = 3,
 }
 
+local function HandleScanProgress(specName, current, total, finishedReason)
+    if finishedReason then
+        scanStatusText:SetText("")
+        RebuildFilteredResults()
+        return
+    end
+    scanStatusText:SetText(string.format("Where2Go: scanning spec eligibility... %d/%d (%s)", current or 0, total or 0, specName or ""))
+end
+
 Where2GoBrowserPanel = {}
 
 function Where2GoBrowserPanel.Toggle()
@@ -453,6 +469,8 @@ function Where2GoBrowserPanel.Toggle()
     if browserFrame:IsShown() then
         browserFrame:Hide()
     else
+        Where2GoSpecEligibilityScan.SetProgressCallback(HandleScanProgress)
+        Where2GoSpecEligibilityScan.EnsureScanned()
         RebuildFilteredResults()
         browserFrame:Show()
     end
