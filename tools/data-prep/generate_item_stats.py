@@ -1,4 +1,4 @@
-"""Fetch per-item stat metadata (primary/secondary stat types) for every
+"""Fetch per-item stat metadata (secondary stat types) for every
 item referenced in Where2Go/Core/Sources.lua, from the Battle.net Game
 Data API. Stages output at tools/data-prep/scratch/ItemStats.lua.new and
 prints a diff against the committed Where2Go/Core/ItemStats.lua for
@@ -24,7 +24,6 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 SOURCES_LUA_PATH = os.path.join(REPO_ROOT, "Where2Go", "Core", "Sources.lua")
 ITEM_STATS_LUA_PATH = os.path.join(REPO_ROOT, "Where2Go", "Core", "ItemStats.lua")
 
-PRIMARY_STAT_TYPES = {"STRENGTH", "AGILITY", "INTELLECT"}
 SECONDARY_STAT_TYPES = {"CRIT_RATING", "HASTE_RATING", "MASTERY_RATING", "VERSATILITY"}
 
 
@@ -42,17 +41,14 @@ def fetch_item_stats(token, item_id):
     data = api_get(token, f"/data/wow/item/{item_id}")
     preview = data.get("preview_item", {})
     stats = preview.get("stats", [])
-    primary_stats = []
     secondary_stats = []
     for stat in stats:
         if stat.get("is_negated"):
             continue
         stat_type = stat.get("type", {}).get("type")
-        if stat_type in PRIMARY_STAT_TYPES:
-            primary_stats.append(stat_type)
-        elif stat_type in SECONDARY_STAT_TYPES:
+        if stat_type in SECONDARY_STAT_TYPES:
             secondary_stats.append(stat_type)
-    return {"primaryStats": primary_stats, "secondaryStats": secondary_stats}
+    return {"secondaryStats": secondary_stats}
 
 
 def render_lua(item_stats):
@@ -67,11 +63,9 @@ def render_lua(item_stats):
     ]
     for item_id in sorted(item_stats.keys()):
         stats = item_stats[item_id]
-        primary = ", ".join(f'"{s}"' for s in stats["primaryStats"])
         secondary = ", ".join(f'"{s}"' for s in stats["secondaryStats"])
         lines.append(
-            f"    [{item_id}] = {{ primaryStats = {{ {primary} }}, "
-            f"secondaryStats = {{ {secondary} }} }},"
+            f"    [{item_id}] = {{ secondaryStats = {{ {secondary} }} }},"
         )
     lines.append("}")
     lines.append("")
