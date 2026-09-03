@@ -55,23 +55,32 @@ packaging/release readiness (`tools/package.ps1`, `tools/smoke-test.ps1`,
 Do not start a later item until the earlier item has a documented acceptance
 check and the preceding item is verified.
 
-## Phase 6: Item Browser & Preferred-List Management (planned, not yet implemented)
+## Phase 6: Item Browser & Preferred-List Management (Sub-project A complete, B not yet implemented)
 
-Design + implementation plans are fully written and ready to execute —
-next session can go straight to subagent-driven-development, no further
-brainstorming needed:
-
-- `docs/superpowers/specs/2026-09-03-phase6-item-stats-design.md` +
-  `docs/superpowers/plans/2026-09-03-phase6-item-stats.md` — fetch/store
-  per-item stat metadata from Battle.net (needed for stat-based filtering).
-- `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md` +
-  `docs/superpowers/plans/2026-09-03-phase6-item-browser.md` — a separate
-  browser window: filter the full item pool by dungeon/boss, slot, stat,
-  spec-eligibility, and name; stage multiple picks; commit them to the
-  active (Drop/Voidcore) preferred list in one action; view/clear the
-  preferred list from the same screen.
-
-Do the item-stats plan first (item-browser's stat filter depends on it).
+- [x] Sub-project A (item stat metadata): `docs/superpowers/specs/2026-09-03-phase6-item-stats-design.md`
+      + `docs/superpowers/plans/2026-09-03-phase6-item-stats.md`. Delivered
+      `tools/data-prep/generate_item_stats.py`, `Where2Go/Core/ItemStats.lua`
+      (378 items, real Battle.net data), and `tests/itemstats_spec.lua`
+      (including a Sources.lua-coverage check). Documented in
+      `docs/SEASON_CHECKLIST.md` and `tools/data-prep/README.md`.
+      **Known limitation, deliberately deferred**: `primaryStats` is
+      currently biased toward INTELLECT with zero STRENGTH/AGILITY entries
+      across all 378 items — the plan's "drop `is_negated` stats" rule
+      collapses WoW's flex-primary itemization down to whichever single
+      reading the API's default context returns, rather than the design
+      spec's original intent (record each option's negation flag). Nothing
+      downstream reads `primaryStats` yet (Sub-project B only filters on
+      `secondaryStats` + live spec-eligibility), so this is safe to leave
+      as-is until a primary-stat filter or BiS feature is actually built —
+      at that point, decide the field's semantics deliberately and re-run
+      the live fetch (Task 3's manual checkpoint) before relying on it.
+- [ ] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
+      + `docs/superpowers/plans/2026-09-03-phase6-item-browser.md` — a separate
+      browser window: filter the full item pool by dungeon/boss, slot, stat,
+      spec-eligibility, and name; stage multiple picks; commit them to the
+      active (Drop/Voidcore) preferred list in one action; view/clear the
+      preferred list from the same screen. Ready to execute now that
+      Sub-project A is merged.
 
 **Deferred from this phase**: browsing/filtering by a curated per-spec
 BiS (best-in-slot) list — would need new curated data collected per spec
