@@ -55,7 +55,7 @@ packaging/release readiness (`tools/package.ps1`, `tools/smoke-test.ps1`,
 Do not start a later item until the earlier item has a documented acceptance
 check and the preceding item is verified.
 
-## Phase 6: Item Browser & Preferred-List Management (both sub-projects implemented; B awaiting live checkpoint)
+## Phase 6: Item Browser & Preferred-List Management (Sub-project A complete; B implemented, fixes applied from live checkpoint round 1, awaiting re-verification)
 
 - [x] Sub-project A (item stat metadata): `docs/superpowers/specs/2026-09-03-phase6-item-stats-design.md`
       + `docs/superpowers/plans/2026-09-03-phase6-item-stats.md`. Delivered
@@ -86,7 +86,7 @@ check and the preceding item is verified.
       quick add-on to this sub-project; revisit only if a primary-stat
       filter or BiS feature is actually built, and budget it as its own
       small project rather than a follow-up task.
-- [x] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
+- [ ] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
       + `docs/superpowers/plans/2026-09-03-phase6-item-browser.md`. Delivered
       `Where2Go/Core/ItemBrowser.lua` (pure pool/filter/sort logic,
       `tests/itembrowser_spec.lua`) and `Where2Go/UI/BrowserPanel.lua` (the
@@ -96,13 +96,41 @@ check and the preceding item is verified.
       Implemented the cache pre-warm design note below: `Toggle()` calls
       `C_Item.RequestLoadItemDataByID` over the whole pool on first open
       and refreshes the list as `GET_ITEM_INFO_RECEIVED` fires (guarded to
-      only run while the browser is actually shown). **Awaiting Task 5's
-      manual live checkpoint** (requires the WoW client) before this can
-      be marked fully done — code review is complete and the full test
-      suite passes (10 specs, 0 failures), but no one has opened the
-      window in-game yet.
-      **Known follow-ups, deliberately not fixed in this pass** (both
-      cosmetic/low-impact, found during final review):
+      only run while the browser is actually shown).
+      **Live checkpoint round 1 found 3 real issues, all now fixed** (full
+      test suite green, 10 specs, 0 failures) but **not yet re-verified
+      live** — this is why the item stays unchecked:
+      1. Non-equipment loot (housing decor, crafting recipes, trophies,
+         a consumable/reagent — 60 of 378 pool items, confirmed via a live
+         Battle.net API classification scan) was showing up in the
+         browser. Fixed: `ItemBrowser.lua`'s `matchesFilters` now
+         unconditionally excludes any item with no resolvable equip slot.
+      2. The stat filter was union (OR: matches any selected stat).
+         Changed to intersection (AND: must match every selected stat)
+         per explicit product decision after live comparison of both
+         behaviors.
+      3. **Confirmed bug in already-merged Phase 3 code**, not introduced
+         by this branch: `Where2Go/Core/DirectDrop.lua`'s
+         `IsEligibleForSpec` treats `C_Item.GetItemSpecInfo` returning an
+         *empty* table `{}` as "restricted, no spec matches" instead of
+         "no restriction data" — because `{}` is truthy in Lua, the
+         function's existing `if not specTable then return true end`
+         check doesn't catch it, so execution falls through to an empty
+         `ipairs` loop and returns `false` (ineligible). Confirmed via a
+         live in-game `/dump C_Item.GetItemSpecInfo(...)` on a necklace,
+         which returned `{}`. This affects every feature using
+         `IsEligibleForSpec` — `DirectDrop.lua`'s own ranking and
+         `VoidcoreDrop.lua`, not just this browser — and has likely been
+         silently misclassifying universally-usable neck/ring items as
+         ineligible since Phase 3 shipped. Fixed:
+         `if not specTable or #specTable == 0 then return true end`.
+         **Because this fix touches already-shipped Phase 3 behavior**
+         (not just this branch's new code), specifically re-verify after
+         merge that direct-drop and Voidcore recommendations now
+         correctly count previously-hidden neck/ring items as eligible.
+      **Known follow-ups, deliberately not fixed** (both cosmetic/low-
+      impact, found during final review, unrelated to the round-1 issues
+      above):
       - The Drop/Voidcore mode buttons never show a pressed highlight on
         the browser's first open (an interaction between two otherwise-
         correct fixes: an initial `SetMode("DROP")` call and `SetMode`'s
