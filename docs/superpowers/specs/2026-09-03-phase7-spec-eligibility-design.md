@@ -2,9 +2,9 @@
 
 **Status:** Design only — not planned or implemented. Written to capture a
 concrete finding from Phase 6 Sub-project B's live checkpoint before
-starting implementation elsewhere. Do not build from this doc without
-first writing an implementation plan and confirming the open questions
-below.
+starting implementation elsewhere. The open question below is now
+resolved (confirmed live 2026-09-03); next step is an implementation
+plan.
 
 ## Problem
 
@@ -83,27 +83,18 @@ This only ever covers the scanning player's own class (matching
 needs — Where2Go has never tried to answer "which of all 40 specs across
 the game can use this," only "can *my* current character use this").
 
-## Open question — must be resolved before writing an implementation plan
+## Open question — RESOLVED (confirmed live 2026-09-03)
 
 **Does Where2Go's own Voidcore system use the same "Nebulous Voidcache"
-item, or an equivalent per-spec-filtered tooltip?** `Where2Go/Core/VoidcoreDrop.lua`
-and `VoidcoreHistory.lua` already track a Voidcore bonus-roll system, and
-the reference addon is literally named after it — strongly suggesting
-they're the same or a closely related in-game feature — but this has not
-been confirmed. If Where2Go's Voidcore item's tooltip does NOT show a
-per-spec-filtered item list the way Nebulous Voidcache does, this whole
-approach doesn't transfer and needs rethinking (possibly scanning a
-different tooltip, or the Encounter Journal's own loot-spec filter
-instead — the Encounter Journal also respects `SetLootSpecialization`
-for its "show loot for spec" toggle, which might be a viable alternative
-scan target if Voidcore's own tooltip doesn't work this way).
+item, or an equivalent per-spec-filtered tooltip?** Confirmed live: the
+Voidcore item's tooltip content changes when the player's loot
+specialization is switched to a spec with a different stat
+allocation/weapon-armor type. This matches Nebulous Voidcache's
+behavior, so the tooltip-scanning technique in this doc transfers
+directly — no need to fall back to the Encounter Journal's loot-spec
+filter as an alternative scan target.
 
-**Verify this first, live in-game, before scoping an implementation
-plan**: set loot specialization to a spec that couldn't use the currently
-active spec's stat allocation (e.g. switch between a Balance Druid's
-loot spec and a Feral Druid's loot spec), then check whether the
-Voidcore item's tooltip content actually changes to reflect a different,
-spec-appropriate item list.
+This clears the doc's precondition for moving to an implementation plan.
 
 ## Sketch of what an implementation would need (not scoped as tasks yet)
 

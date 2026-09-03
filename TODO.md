@@ -55,7 +55,7 @@ packaging/release readiness (`tools/package.ps1`, `tools/smoke-test.ps1`,
 Do not start a later item until the earlier item has a documented acceptance
 check and the preceding item is verified.
 
-## Phase 6: Item Browser & Preferred-List Management (Sub-project A complete; B implemented, fixes applied from live checkpoint round 1, awaiting re-verification)
+## Phase 6: Item Browser & Preferred-List Management (complete)
 
 - [x] Sub-project A (item stat metadata): `docs/superpowers/specs/2026-09-03-phase6-item-stats-design.md`
       + `docs/superpowers/plans/2026-09-03-phase6-item-stats.md`. Delivered
@@ -86,7 +86,7 @@ check and the preceding item is verified.
       quick add-on to this sub-project; revisit only if a primary-stat
       filter or BiS feature is actually built, and budget it as its own
       small project rather than a follow-up task.
-- [ ] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
+- [x] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
       + `docs/superpowers/plans/2026-09-03-phase6-item-browser.md`. Delivered
       `Where2Go/Core/ItemBrowser.lua` (pure pool/filter/sort logic,
       `tests/itembrowser_spec.lua`) and `Where2Go/UI/BrowserPanel.lua` (the
@@ -97,9 +97,9 @@ check and the preceding item is verified.
       `C_Item.RequestLoadItemDataByID` over the whole pool on first open
       and refreshes the list as `GET_ITEM_INFO_RECEIVED` fires (guarded to
       only run while the browser is actually shown).
-      **Live checkpoint round 1 found 3 real issues, all now fixed** (full
-      test suite green, 10 specs, 0 failures) but **not yet re-verified
-      live** — this is why the item stays unchecked:
+      **Live checkpoint rounds 1-3 found 4 real issues; 3 fixed and
+      confirmed live, 1 accepted as a known limitation deferred to Phase 7
+      (see below)** — full test suite green, 10 specs, 0 failures:
       1. Non-equipment loot (housing decor, crafting recipes, trophies,
          a consumable/reagent — 60 of 378 pool items, confirmed via a live
          Battle.net API classification scan) was showing up in the
@@ -160,13 +160,12 @@ check and the preceding item is verified.
          false-positive: wrong-weapon/armor-type items may still appear
          as eligible.** This applies to DirectDrop's and VoidcoreDrop's
          existing recommendations too, not just this browser.
-      **Because fixes 3 and 4 touch already-shipped Phase 3 behavior**
-      (not just this branch's new code), specifically re-verify after
-      merge that direct-drop and Voidcore recommendations now correctly
-      count previously-hidden universal neck/ring items as eligible (fix
-      3 is confirmed working) — fix 4's wrong-type false-positive is a
-      known, accepted limitation for now, not something to re-test as if
-      it were fixed.
+      **Fixes 3 and 4 touch already-shipped Phase 3 behavior**, not just
+      this branch's new code — direct-drop and Voidcore recommendations
+      were re-verified live post-merge to now correctly count previously-
+      hidden universal neck/ring items as eligible (fix 3 confirmed
+      working). Fix 4's wrong-type false-positive remains a known,
+      accepted limitation, not something to re-test as if it were fixed.
       **Known follow-ups, deliberately not fixed** (both cosmetic/low-
       impact, found during final review, unrelated to the live-checkpoint
       issues above):
