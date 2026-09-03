@@ -124,13 +124,35 @@ check and the preceding item is verified.
          silently misclassifying universally-usable neck/ring items as
          ineligible since Phase 3 shipped. Fixed:
          `if not specTable or #specTable == 0 then return true end`.
-         **Because this fix touches already-shipped Phase 3 behavior**
-         (not just this branch's new code), specifically re-verify after
-         merge that direct-drop and Voidcore recommendations now
-         correctly count previously-hidden neck/ring items as eligible.
+      4. **Round-1 fix #3 above was too broad**: treating an empty
+         `GetItemSpecInfo` as always-eligible also made wrong-weapon-type
+         items (e.g. a bow) show as eligible for classes that cannot
+         equip that weapon type at all (confirmed live: a bow showed
+         eligible for a Shaman). `GetItemSpecInfo` alone can't distinguish
+         "no restriction, universal item" from "not applicable, wrong
+         item type for this class." Researched three ways to disambiguate:
+         a hand-maintained class→weapon/armor-type table (rejected — web
+         research produced directly contradictory data across sources,
+         see [[feedback-verify-with-live-diagnostics-before-deciding]]);
+         the Battle.net Web API (checked the full raw item response and
+         `/data/wow/playable-class/{id}` — neither exposes weapon/armor
+         proficiency data at all); and the live client API
+         `C_Item.IsEquippableItem(itemId)` (current, non-deprecated —
+         the old global `IsEquippableItem` was deprecated in patch
+         10.2.6 — which asks the client directly and needs no static
+         data). Used the third: `IsEligibleForSpec` now gates on
+         `C_Item.IsEquippableItem(itemId) == false` (the `== false`,
+         not a truthiness check, deliberately tolerates a `nil` return
+         for an uncached item rather than treating it as ineligible)
+         before consulting `GetItemSpecInfo` at all.
+      **Because fixes 3 and 4 touch already-shipped Phase 3 behavior**
+      (not just this branch's new code), specifically re-verify after
+      merge that direct-drop and Voidcore recommendations now correctly
+      (a) count previously-hidden universal neck/ring items as eligible,
+      and (b) still correctly exclude wrong-weapon/armor-type items.
       **Known follow-ups, deliberately not fixed** (both cosmetic/low-
-      impact, found during final review, unrelated to the round-1 issues
-      above):
+      impact, found during final review, unrelated to the live-checkpoint
+      issues above):
       - The Drop/Voidcore mode buttons never show a pressed highlight on
         the browser's first open (an interaction between two otherwise-
         correct fixes: an initial `SetMode("DROP")` call and `SetMode`'s
