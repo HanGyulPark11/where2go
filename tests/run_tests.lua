@@ -9,6 +9,7 @@ local specs = {
     "tests/raidranks_spec.lua",
     "tests/ranking_spec.lua",
     "tests/voidcorehistory_spec.lua",
+    "tests/specEligibilityScan_spec.lua",
     "tests/itembrowser_spec.lua",
 }
 
