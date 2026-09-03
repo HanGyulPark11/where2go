@@ -162,7 +162,7 @@ end
 
 local function CreateBrowserPanel()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame:SetSize(700, 620)
+    frame:SetSize(700, 720)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
