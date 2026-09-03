@@ -54,14 +54,18 @@ end
 -- A row of mutually-exclusive toggle buttons (only one active at a time,
 -- or none). `onSelect` is called with the selected value (or nil if the
 -- currently-active button is clicked again, deselecting it).
-local function CreateToggleButtonRow(parent, values, labelFn, onSelect)
+local function CreateToggleButtonRow(parent, values, labelFn, onSelect, maxWidth)
     local buttons = {}
     local selectedValue = nil
-    local x = 0
+    local x, y = 0, 0
     for _, value in ipairs(values) do
+        if maxWidth and x + 90 > maxWidth then
+            x = 0
+            y = y - 24
+        end
         local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
         button:SetSize(90, 20)
-        button:SetPoint("TOPLEFT", x, 0)
+        button:SetPoint("TOPLEFT", x, y)
         button:SetText(labelFn(value))
         button:SetScript("OnClick", function()
             if selectedValue == value then
@@ -81,9 +85,18 @@ local function CreateToggleButtonRow(parent, values, labelFn, onSelect)
         buttons[value] = button
         x = x + 94
     end
-    return buttons
+    local totalHeight = (-y) + 20
+    return buttons, totalHeight
 end
 
+-- KNOWN LIMITATION: creates new button frames on every call rather than
+-- pooling/reusing them (unlike the result row list, which does pool).
+-- WoW frames are never destroyed, so this grows slowly with repeated
+-- dungeon/raid clicks over a long session. Deliberately left as-is:
+-- fixing it safely requires reworking this row's per-click
+-- closure/highlight logic, and the real-world growth rate is slow
+-- (~9 frames per click) relative to that risk. Revisit if it's ever
+-- actually observed to matter.
 local function RebuildBossButtons(parent, dungeonOrRaid)
     for _, btn in pairs(bossButtons) do
         btn:Hide()
@@ -100,7 +113,7 @@ local function RebuildBossButtons(parent, dungeonOrRaid)
     bossButtons = CreateToggleButtonRow(parent, bossNames, function(v) return v end, function(selected)
         filters.bossName = selected
         RebuildFilteredResults()
-    end)
+    end, 660)
     RebuildFilteredResults()
 end
 
@@ -138,6 +151,9 @@ local function RefreshVisibleRows()
 end
 
 RebuildFilteredResults = function()
+    if not itemPool then
+        return
+    end
     local unsorted = Where2GoItemBrowser.FilterItems(itemPool, filters, BuildContext())
     filteredResults = Where2GoItemBrowser.SortItems(unsorted, nil, BuildContext())
     ClampScrollOffset()
@@ -146,7 +162,7 @@ end
 
 local function CreateBrowserPanel()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame:SetSize(520, 480)
+    frame:SetSize(700, 620)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -179,6 +195,9 @@ local function CreateBrowserPanel()
     voidcoreButton:SetPoint("LEFT", dropButton, "RIGHT", 6, 0)
     voidcoreButton:SetText("Voidcore")
     local function SetMode(mode)
+        if mode == currentMode then
+            return
+        end
         currentMode = mode
         if mode == "DROP" then
             dropButton:LockHighlight()
@@ -204,7 +223,7 @@ local function CreateBrowserPanel()
 
     -- Boss row (populated once a dungeon/raid is selected)
     local bossRow = CreateFrame("Frame", nil, frame)
-    bossRow:SetPoint("TOPLEFT", dungeonRow, "BOTTOMLEFT", 0, -26)
+    bossRow:SetPoint("TOPLEFT", dungeonRow, "BOTTOMLEFT", 0, -56)
     bossRow:SetSize(496, 20)
 
     local dungeonAndRaidEntries = {}
@@ -218,20 +237,20 @@ local function CreateBrowserPanel()
         filters.dungeonName = selected and selected.name or nil
         filters.bossName = nil
         RebuildBossButtons(bossRow, selected)
-    end)
+    end, 660)
 
     -- Slot row
     local slotRow = CreateFrame("Frame", nil, frame)
-    slotRow:SetPoint("TOPLEFT", bossRow, "BOTTOMLEFT", 0, -26)
+    slotRow:SetPoint("TOPLEFT", bossRow, "BOTTOMLEFT", 0, -56)
     slotRow:SetSize(496, 20)
     slotButtons = CreateToggleButtonRow(slotRow, SLOT_ORDER, function(s) return s end, function(selected)
         filters.slot = selected
         RebuildFilteredResults()
-    end)
+    end, 660)
 
     -- Stat checkbox row (multi-select)
     local statRow = CreateFrame("Frame", nil, frame)
-    statRow:SetPoint("TOPLEFT", slotRow, "BOTTOMLEFT", 0, -26)
+    statRow:SetPoint("TOPLEFT", slotRow, "BOTTOMLEFT", 0, -56)
     statRow:SetSize(496, 20)
     local statX = 0
     for _, stat in ipairs(STAT_ORDER) do
@@ -316,6 +335,7 @@ local function CreateBrowserPanel()
         text:SetPoint("LEFT", checkbox, "RIGHT", 4, 0)
         text:SetPoint("RIGHT", row, "RIGHT", 0, 0)
         text:SetJustifyH("LEFT")
+        text:SetWordWrap(false)
 
         row.checkbox = checkbox
         row.text = text
@@ -354,6 +374,7 @@ local function CreateBrowserPanel()
     frame.dungeonRow = dungeonRow
     frame.bossRow = bossRow
     frame.searchBox = searchBox
+    SetMode("DROP")
     frame:Hide()
     return frame
 end
@@ -384,13 +405,16 @@ function Where2GoBrowserPanel.Toggle()
         local itemLoadWatcher = CreateFrame("Frame")
         itemLoadWatcher:RegisterEvent("GET_ITEM_INFO_RECEIVED")
         itemLoadWatcher:SetScript("OnEvent", function()
-            RebuildFilteredResults()
+            if browserFrame and browserFrame:IsShown() then
+                RebuildFilteredResults()
+            end
         end)
         RebuildFilteredResults()
     end
     if browserFrame:IsShown() then
         browserFrame:Hide()
     else
+        RebuildFilteredResults()
         browserFrame:Show()
     end
 end

@@ -57,12 +57,14 @@ end
 
 -- FilterItems: stat filter
 do
+    local savedItemStats = Where2GoItemStats
     Where2GoItemStats = { STATS = {
         [100] = { secondaryStats = { "CRIT_RATING" } },
         [101] = { secondaryStats = { "HASTE_RATING" } },
     } }
     local results = Where2GoItemBrowser.FilterItems(fixturePool(), { stats = { "HASTE_RATING" } }, fixtureContext())
     assert(#results == 1 and results[1].itemId == 101, "stat filter should match only item 101's Haste")
+    Where2GoItemStats = savedItemStats
 end
 
 -- FilterItems: combined filters (AND logic)
