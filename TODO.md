@@ -124,32 +124,49 @@ check and the preceding item is verified.
          silently misclassifying universally-usable neck/ring items as
          ineligible since Phase 3 shipped. Fixed:
          `if not specTable or #specTable == 0 then return true end`.
-      4. **Round-1 fix #3 above was too broad**: treating an empty
-         `GetItemSpecInfo` as always-eligible also made wrong-weapon-type
-         items (e.g. a bow) show as eligible for classes that cannot
-         equip that weapon type at all (confirmed live: a bow showed
-         eligible for a Shaman). `GetItemSpecInfo` alone can't distinguish
-         "no restriction, universal item" from "not applicable, wrong
-         item type for this class." Researched three ways to disambiguate:
-         a hand-maintained class→weapon/armor-type table (rejected — web
-         research produced directly contradictory data across sources,
-         see [[feedback-verify-with-live-diagnostics-before-deciding]]);
+      4. **Round-1 fix #3 above was too broad, and the follow-up attempt
+         did not fix it either — this remains a known, open limitation.**
+         Treating an empty `GetItemSpecInfo` as always-eligible also
+         makes wrong-weapon/armor-type items (e.g. a bow) show as
+         eligible for classes that cannot equip that item type at all
+         (confirmed live: a bow showed eligible for a Shaman).
+         `GetItemSpecInfo` alone can't distinguish "no restriction,
+         universal item" from "not applicable, wrong item type for this
+         class." Tried gating on `C_Item.IsEquippableItem(itemId) == false`
+         (a live client API expected to check class/weapon/armor-type
+         equippability) before consulting `GetItemSpecInfo` — **confirmed
+         live that this did NOT fix the reported case**; `IsEquippableItem`
+         does not reliably answer this question for our purposes (left in
+         place as a real-but-currently-ineffective-for-this-case gate,
+         since it doesn't hurt and may help other cases). Also confirmed,
+         via research, that neither a hand-maintained class→weapon/armor-
+         type table (web sources gave directly contradictory data — see
+         [[feedback-verify-with-live-diagnostics-before-deciding]]) nor
          the Battle.net Web API (checked the full raw item response and
          `/data/wow/playable-class/{id}` — neither exposes weapon/armor
-         proficiency data at all); and the live client API
-         `C_Item.IsEquippableItem(itemId)` (current, non-deprecated —
-         the old global `IsEquippableItem` was deprecated in patch
-         10.2.6 — which asks the client directly and needs no static
-         data). Used the third: `IsEligibleForSpec` now gates on
-         `C_Item.IsEquippableItem(itemId) == false` (the `== false`,
-         not a truthiness check, deliberately tolerates a `nil` return
-         for an uncached item rather than treating it as ineligible)
-         before consulting `GetItemSpecInfo` at all.
+         proficiency data) can solve this cheaply.
+         **The real fix requires bigger infrastructure — see
+         `docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md`**,
+         a new design doc (not planned/implemented yet) proposing the
+         technique the real `VoidcoreAdvisor` addon uses: scan the
+         "Nebulous Voidcache" tooltip per loot-spec-setting (Blizzard's
+         own server-computed, correctly-filtered loot list for that spec),
+         which Where2Go's own Voidcore system may share (open question in
+         that doc, needs live confirmation first). Deliberately scoped as
+         its own future phase, not a Sub-project B follow-up — it changes
+         a real user setting (loot specialization) as a side effect and
+         needs its own data-storage design (per-character, not global).
+         **Until Phase 7 exists, "Current spec eligible only" has a known
+         false-positive: wrong-weapon/armor-type items may still appear
+         as eligible.** This applies to DirectDrop's and VoidcoreDrop's
+         existing recommendations too, not just this browser.
       **Because fixes 3 and 4 touch already-shipped Phase 3 behavior**
       (not just this branch's new code), specifically re-verify after
       merge that direct-drop and Voidcore recommendations now correctly
-      (a) count previously-hidden universal neck/ring items as eligible,
-      and (b) still correctly exclude wrong-weapon/armor-type items.
+      count previously-hidden universal neck/ring items as eligible (fix
+      3 is confirmed working) — fix 4's wrong-type false-positive is a
+      known, accepted limitation for now, not something to re-test as if
+      it were fixed.
       **Known follow-ups, deliberately not fixed** (both cosmetic/low-
       impact, found during final review, unrelated to the live-checkpoint
       issues above):
