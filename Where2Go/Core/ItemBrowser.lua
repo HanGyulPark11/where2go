@@ -39,13 +39,17 @@ function Where2GoItemBrowser.BuildItemPool()
 end
 
 local function matchesFilters(entry, filters, context)
+    local slot = context.getSlot(entry.itemId)
+    if not slot then
+        return false
+    end
     if filters.dungeonName and entry.contentName ~= filters.dungeonName then
         return false
     end
     if filters.bossName and entry.bossName ~= filters.bossName then
         return false
     end
-    if filters.slot and context.getSlot(entry.itemId) ~= filters.slot then
+    if filters.slot and slot ~= filters.slot then
         return false
     end
     if filters.stats and #filters.stats > 0 then

@@ -79,6 +79,21 @@ do
     assert(#results == 0, "an impossible filter should return an empty (not nil) array")
 end
 
+-- FilterItems: items with no resolvable slot (non-equipment loot) are always excluded
+do
+    local poolWithNonEquip = fixturePool()
+    table.insert(poolWithNonEquip, { itemId = 400, bossId = 3, bossName = "Boss C", contentName = "Raid One", raidName = "Raid One", kind = "raid" })
+    local context = fixtureContext()
+    -- itemId 400 has no entry in fixtureContext()'s slots table, so getSlot(400) returns nil
+    local results = Where2GoItemBrowser.FilterItems(poolWithNonEquip, {}, context)
+    local found400 = false
+    for _, entry in ipairs(results) do
+        if entry.itemId == 400 then found400 = true end
+    end
+    assert(not found400, "an item with no resolvable equip slot should never appear, even with no filters applied")
+    assert(#results == 4, "the 4 original fixture items (all of which have slots) should still all pass with no filters")
+end
+
 -- SortItems: by name
 do
     local sorted = Where2GoItemBrowser.SortItems(fixturePool(), "NAME", fixtureContext())
