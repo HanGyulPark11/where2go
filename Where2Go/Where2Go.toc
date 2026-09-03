@@ -10,9 +10,9 @@ Core\Constants.lua
 Core\Tracks.lua
 Core\Sources.lua
 Core\ItemStats.lua
+Core\ItemBrowser.lua
 Core\RaidRanks.lua
 Core\Ranking.lua
-Core\ItemBrowser.lua
 Core\DirectDrop.lua
 Core\VoidcoreHistory.lua
 Core\VoidcoreDrop.lua
@@ -20,3 +20,4 @@ Core\Compare.lua
 Core\Equipment.lua
 Core\Init.lua
 UI\Panel.lua
+UI\BrowserPanel.lua

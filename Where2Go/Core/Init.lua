@@ -112,9 +112,11 @@ SlashCmdList["WHERE2GO"] = function(msg)
         HandlePrefCommand(args)
     elseif subcommand == "compare" then
         HandleCompareCommand()
+    elseif subcommand == "browse" then
+        Where2GoBrowserPanel.Toggle()
     elseif not subcommand or subcommand == "" then
         Where2Go_TogglePanel()
     else
-        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare")
+        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse")
     end
 end
