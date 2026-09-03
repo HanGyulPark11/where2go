@@ -58,7 +58,7 @@ Confirmed mechanism:
 1. **The "Voidcache" is not one shared item** — Blizzard has a distinct
    item per dungeon and per raid boss, each literally named
    `"Nebulous Voidcache: <content name>"` (confirmed live on Wowhead for
-   6 of Where2Go's own 17 dungeons/bosses — see Data Sourcing below).
+   all 17 of Where2Go's own dungeons/bosses — see Data Sourcing below).
 2. `C_TooltipInfo.GetItemByID(voidcacheItemId, ...)` is a pure data call
    — it does not require holding the item, being in the dungeon, or being
    near anything. This removes an entire class of feasibility concern the
@@ -91,28 +91,38 @@ Voidcache, so this technique transfers directly.
 VoidcoreAdvisor's own committed `SeasonData.lua` happens to track the
 exact same season's content as Where2Go's `Sources.lua` — its
 `dungeonVoidcacheIDs`/`raidEncounterCacheIDs` instance/boss IDs are a
-1:1 match against `Sources.lua`'s 8 dungeons and 9 Tidebound Grotto
-bosses (same instance IDs, same names). Since that repo has no license,
-its ID table was used only as a **candidate list to verify independently**,
-not copied. Verification: fetched 6 of the candidate item pages directly
-from Wowhead (`wowhead.com/item=<id>`) and confirmed the exact name
-pattern for both content types:
+1:1 match against `Sources.lua`'s 8 dungeons and the 9 raid bosses
+across `Sources.lua`'s two raid instances (The Tidebound Grotto: 1 boss;
+The Venomous Abyss: 8 bosses). Since that repo has no license, its ID
+table was used only as a **candidate list to verify independently**, not
+copied. Verification: fetched every one of the 17 candidate item pages
+directly from Wowhead (`wowhead.com/item=<id>`) and confirmed the name
+against the matching `Sources.lua` dungeon/boss name for all 17 —
+Blizzard's naming pattern is `"Nebulous Voidcache: <content name>"` for
+both dungeons and raid bosses, and it held without exception:
 
-| ID | Confirmed name |
-|---|---|
-| 279618 | Nebulous Voidcache: Altar of Fangs (dungeon) |
-| 279624 | Nebulous Voidcache: Temple of Sethraliss (dungeon) |
-| 274708 | Nebulous Voidcache: Nymrissa Wavecaller (raid boss) |
-| 278285 | Nebulous Voidcache: Soulcoiler Nek'zali (raid boss) |
-| 278286 | Nebulous Voidcache: Tortollan Explorers (raid boss) |
-| 278287 | Nebulous Voidcache: Vashnik (raid boss) |
+| `Sources.lua` name | instanceId/bossId | Voidcache itemId | Confirmed Wowhead name |
+|---|---|---|---|
+| Altar of Fangs | 1322 | 279618 | Nebulous Voidcache: Altar of Fangs |
+| Den of Nalorakk | 1311 | 279620 | Nebulous Voidcache: Den of Nalorakk |
+| Murder Row | 1304 | 279623 | Nebulous Voidcache: Murder Row |
+| The Blinding Vale | 1309 | 279619 | Nebulous Voidcache: The Blinding Vale |
+| Voidscar Arena | 1313 | 279625 | Nebulous Voidcache: Voidscar Arena |
+| Kings' Rest | 1041 | 279621 | Nebulous Voidcache: Kings' Rest |
+| Ruby Life Pools | 1202 | 279622 | Nebulous Voidcache: Ruby Life Pools |
+| Temple of Sethraliss | 1030 | 279624 | Nebulous Voidcache: Temple of Sethraliss |
+| Nymrissa Wavecaller | 2849 | 274708 | Nebulous Voidcache: Nymrissa Wavecaller |
+| Nek'zali the Soulcoiler | 2888 | 278285 | Nebulous Voidcache: Soulcoiler Nek'zali |
+| Entombed Sentinels | 2874 | 278283 | Nebulous Voidcache: Entombed Sentinels |
+| The Lost Explorers | 2894 | 278286 | Nebulous Voidcache: Tortollan Explorers |
+| Vashnik the Malignant | 2882 | 278287 | Nebulous Voidcache: Vashnik |
+| Sszorak | 2871 | 278288 | Nebulous Voidcache: Sszorak |
+| The Twin Fangs | 2887 | 278289 | Nebulous Voidcache: The Twin Fangs |
+| The Coiled Altar | 2883 | 278290 | Nebulous Voidcache: The Coiled Altar |
+| Ula'tek | 2895 | 278284 | Nebulous Voidcache: Ula'tek |
 
-The naming pattern (`"Nebulous Voidcache: <content name>"`) held for
-every check across both dungeons and raid bosses, giving high confidence
-in the remaining candidate IDs (not each individually re-verified, but
-independently sourceable the same way during implementation — search
-Wowhead for `"Nebulous Voidcache: <exact Sources.lua name>"` per
-dungeon/boss, not trust-by-inference).
+All 17 dungeon/boss Voidcache item IDs Where2Go needs are independently
+confirmed — no lookups remain for the implementation plan to defer.
 
 **Decision: commit this mapping as a new static data file,
 `Where2Go/Core/VoidcacheIds.lua`**, in the same spirit as `Sources.lua`
