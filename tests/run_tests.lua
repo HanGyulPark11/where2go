@@ -8,6 +8,7 @@ local specs = {
     "tests/raidranks_spec.lua",
     "tests/ranking_spec.lua",
     "tests/voidcorehistory_spec.lua",
+    "tests/itembrowser_spec.lua",
 }
 
 local failureCount = 0
