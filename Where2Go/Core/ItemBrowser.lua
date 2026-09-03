@@ -57,16 +57,17 @@ local function matchesFilters(entry, filters, context)
         if not itemStats then
             return false
         end
-        local matchesAny = false
         for _, wantedStat in ipairs(filters.stats) do
+            local hasStat = false
             for _, s in ipairs(itemStats.secondaryStats) do
                 if s == wantedStat then
-                    matchesAny = true
+                    hasStat = true
+                    break
                 end
             end
-        end
-        if not matchesAny then
-            return false
+            if not hasStat then
+                return false
+            end
         end
     end
     if filters.specEligibleOnly and not context.isEligible(entry.itemId) then

@@ -67,6 +67,19 @@ do
     Where2GoItemStats = savedItemStats
 end
 
+-- FilterItems: multiple selected stats require ALL of them (AND, not OR/union)
+do
+    local savedItemStats = Where2GoItemStats
+    Where2GoItemStats = { STATS = {
+        [100] = { secondaryStats = { "CRIT_RATING" } },
+        [101] = { secondaryStats = { "HASTE_RATING" } },
+        [200] = { secondaryStats = { "CRIT_RATING", "HASTE_RATING" } },
+    } }
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { stats = { "HASTE_RATING", "CRIT_RATING" } }, fixtureContext())
+    assert(#results == 1 and results[1].itemId == 200, "selecting two stats should require an item to have BOTH, matching only item 200")
+    Where2GoItemStats = savedItemStats
+end
+
 -- FilterItems: combined filters (AND logic)
 do
     local results = Where2GoItemBrowser.FilterItems(fixturePool(), { dungeonName = "Dungeon One", slot = "TRINKET" }, fixtureContext())

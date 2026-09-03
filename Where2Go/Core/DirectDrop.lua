@@ -77,7 +77,7 @@ function Where2GoDirectDrop.IsEligibleForSpec(specId)
         -- C_Item.RequestLoadItemDataByID + waiting for the item to
         -- actually cache before ranking, which is real async-design work
         -- deferred to a later phase.
-        if not specTable then
+        if not specTable or #specTable == 0 then
             return true
         end
         for _, id in ipairs(specTable) do
