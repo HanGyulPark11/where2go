@@ -55,7 +55,7 @@ packaging/release readiness (`tools/package.ps1`, `tools/smoke-test.ps1`,
 Do not start a later item until the earlier item has a documented acceptance
 check and the preceding item is verified.
 
-## Phase 6: Item Browser & Preferred-List Management (Sub-project A complete, B not yet implemented)
+## Phase 6: Item Browser & Preferred-List Management (both sub-projects implemented; B awaiting live checkpoint)
 
 - [x] Sub-project A (item stat metadata): `docs/superpowers/specs/2026-09-03-phase6-item-stats-design.md`
       + `docs/superpowers/plans/2026-09-03-phase6-item-stats.md`. Delivered
@@ -86,26 +86,36 @@ check and the preceding item is verified.
       quick add-on to this sub-project; revisit only if a primary-stat
       filter or BiS feature is actually built, and budget it as its own
       small project rather than a follow-up task.
-- [ ] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
-      + `docs/superpowers/plans/2026-09-03-phase6-item-browser.md` — a separate
-      browser window: filter the full item pool by dungeon/boss, slot, stat,
-      spec-eligibility, and name; stage multiple picks; commit them to the
-      active (Drop/Voidcore) preferred list in one action; view/clear the
-      preferred list from the same screen. Ready to execute now that
-      Sub-project A is merged.
-      **Design note for the "spec eligible only" filter**: the plan's
-      `GetItemEligible()` calls `Where2GoDirectDrop.IsEligibleForSpec()`
-      live, per item, at filter time — `C_Item.GetItemSpecInfo`'s
-      already-documented cold-cache ambiguity (`DirectDrop.lua:71-79`,
-      nil meaning either "unrestricted" or "not yet cached") is a bigger
-      risk here than in DirectDrop's single-card use case, since the
-      browser evaluates the whole ~378-item pool at once and most of it
-      may be uncached on a fresh session. Fix by calling
-      `C_Item.RequestLoadItemDataByID` for the full pool proactively at
-      `PLAYER_LOGIN` (the pool is already known statically from
-      `Sources.lua`), well before the player is likely to open the
-      browser, rather than sourcing eligibility from external data —
-      add a brief loading state for the cold-open case.
+- [x] Sub-project B (item browser UI): `docs/superpowers/specs/2026-09-03-phase6-item-browser-design.md`
+      + `docs/superpowers/plans/2026-09-03-phase6-item-browser.md`. Delivered
+      `Where2Go/Core/ItemBrowser.lua` (pure pool/filter/sort logic,
+      `tests/itembrowser_spec.lua`) and `Where2Go/UI/BrowserPanel.lua` (the
+      window: dungeon/boss/slot/stat/spec-eligibility/search filters, a
+      recycled-row result list, staged selection, and the three action
+      buttons), wired via a "Browse" button and `/where2go browse`.
+      Implemented the cache pre-warm design note below: `Toggle()` calls
+      `C_Item.RequestLoadItemDataByID` over the whole pool on first open
+      and refreshes the list as `GET_ITEM_INFO_RECEIVED` fires (guarded to
+      only run while the browser is actually shown). **Awaiting Task 5's
+      manual live checkpoint** (requires the WoW client) before this can
+      be marked fully done — code review is complete and the full test
+      suite passes (10 specs, 0 failures), but no one has opened the
+      window in-game yet.
+      **Known follow-ups, deliberately not fixed in this pass** (both
+      cosmetic/low-impact, found during final review):
+      - The Drop/Voidcore mode buttons never show a pressed highlight on
+        the browser's first open (an interaction between two otherwise-
+        correct fixes: an initial `SetMode("DROP")` call and `SetMode`'s
+        no-op guard for `mode == currentMode`, since `currentMode`
+        already defaults to `"DROP"`). Filtering is unaffected — clicking
+        Voidcore then Drop again does show the highlight correctly.
+      - `RebuildBossButtons` (`Where2Go/UI/BrowserPanel.lua`) creates new
+        button frames on every dungeon/raid click rather than pooling
+        them like the result list does — WoW frames are never destroyed,
+        so this grows slowly (~9 frames/click) over a long session. Left
+        as a documented code comment rather than fixed, since a correct
+        pooling fix means reworking that row's per-click closure/
+        highlight logic and the real-world growth rate is slow.
 
 **Deferred from this phase**: browsing/filtering by a curated per-spec
 BiS (best-in-slot) list — would need new curated data collected per spec
