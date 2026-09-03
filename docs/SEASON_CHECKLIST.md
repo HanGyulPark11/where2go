@@ -28,7 +28,19 @@ earlier ones are done.
    the generator's own header does not carry forward every note from the
    committed file automatically.
 
-4. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
+4. **Refresh `Where2Go/Core/VoidcacheIds.lua`.** No API endpoint exists
+   for this data (see
+   `docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md`'s
+   Data Sourcing section) — it's a manual per-entry Wowhead lookup. For
+   every dungeon in the just-updated `Sources.lua` `DUNGEONS` list and
+   every raid boss in `RAIDS`, search Wowhead for
+   `"Nebulous Voidcache: <exact dungeon or boss name>"` and note the
+   item ID from the result page's URL (`wowhead.com/item=<id>`). Update
+   `Where2GoVoidcacheIds.DUNGEONS`/`RAID_BOSSES` with the new
+   `[instanceId or bossId] = itemId` entries, replacing stale ones for
+   content that rotated out.
+
+5. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
    updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
    needs regenerating too. See `tools/data-prep/README.md` for credential
    setup (same as step 2). From the repo root:
@@ -39,7 +51,7 @@ earlier ones are done.
    `tools/data-prep/scratch/ItemStats.lua.new`'s content into
    `Where2Go/Core/ItemStats.lua`.
 
-5. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
+6. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
    no API equivalent. For the new raid, determine each boss's relative
    item-level rank (1-4) and whether any boss drops a special
    above-normal-cap track (like Season 2's Myth-9/6 final bosses), the
@@ -53,25 +65,25 @@ earlier ones are done.
    in-client measurement) still holds, and update those two by hand if
    not.
 
-6. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
+7. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
    bonus ID ranges (Veteran/Champion/Hero/Myth) changed this season —
    Blizzard sometimes shifts these between seasons. Also check each
    track's `ilvls = { ... }` array (the per-rank item levels), which
    changes essentially every season. Update by hand if so.
 
-7. **Update `Where2GoConstants.SEASON_LABEL`.** In
+8. **Update `Where2GoConstants.SEASON_LABEL`.** In
    `Where2Go/Core/Constants.lua`, update the `SEASON_LABEL` string (e.g.
    `"Midnight Season 2"`) to name the new season. This is a simple
    hand-edit, like the `RaidRanks.lua`/`Tracks.lua` steps above — there is
    no API for it.
 
-8. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
+9. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
    check near the bottom of the file (currently asserting `RAIDS[2]` is
    "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
    Replace it with an equivalent spot-check for the new season's actual
    raid content, or remove it if no longer meaningful.
 
-9. **Run the full test suite and commit.**
+10. **Run the full test suite and commit.**
    ```
    "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
    ```

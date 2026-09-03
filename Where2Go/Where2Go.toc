@@ -9,6 +9,7 @@
 Core\Constants.lua
 Core\Tracks.lua
 Core\Sources.lua
+Core\VoidcacheIds.lua
 Core\ItemStats.lua
 Core\ItemBrowser.lua
 Core\RaidRanks.lua
