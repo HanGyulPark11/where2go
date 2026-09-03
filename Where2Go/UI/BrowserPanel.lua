@@ -145,7 +145,7 @@ RebuildFilteredResults = function()
 end
 
 local function CreateBrowserPanel()
-    local frame = CreateFrame("Frame", "Where2GoBrowserPanel", UIParent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:SetSize(520, 480)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
