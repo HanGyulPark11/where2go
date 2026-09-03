@@ -67,6 +67,17 @@ end
 
 function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
+        -- Prefer real scanned data (Core/SpecEligibilityScan.lua) when
+        -- available for this season and this spec: it's Blizzard's own
+        -- server-computed loot table for the spec, not a heuristic, so
+        -- it correctly rejects wrong-weapon/armor-type items the
+        -- fallback below cannot (see
+        -- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md).
+        local cache = Where2GoCharDB.specEligibility
+        if cache and cache.seasonVersion == Where2GoConstants.SEASON_LABEL and cache.bySpec[specId] then
+            return cache.bySpec[specId][itemId] == true
+        end
+
         -- Gate on basic class/weapon-type equippability first:
         -- GetItemSpecInfo returning empty is ambiguous between "no
         -- restriction" (universal items like necklaces) and "not
