@@ -1,7 +1,7 @@
 local browserFrame
 local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
 local itemPool
-local filters = { dungeonName = nil, bossName = nil, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil }
+local filters = { dungeonName = nil, bossName = nil, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil, specId = nil }
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
 
@@ -28,11 +28,10 @@ local function GetItemSlot(itemId)
 end
 
 local function GetItemEligible(itemId)
-    local specId = select(1, Where2GoDirectDrop.GetCurrentSpecIdAndName())
-    if not specId then
+    if not filters.specId then
         return true
     end
-    return Where2GoDirectDrop.IsEligibleForSpec(specId)(itemId)
+    return Where2GoDirectDrop.IsEligibleForSpec(filters.specId)(itemId)
 end
 
 local function GetItemName(itemId)
@@ -211,6 +210,46 @@ local function CreateBrowserPanel()
     end
     dropButton:SetScript("OnClick", function() SetMode("DROP") end)
     voidcoreButton:SetScript("OnClick", function() SetMode("VOIDCORE") end)
+
+    -- Spec selector dropdown, defaulting to the player's current active
+    -- spec. Browser-only -- DirectDrop's and VoidcoreDrop's own ranked
+    -- panels keep using only the character's actual current spec.
+    local function GetAvailableSpecs()
+        local specs = {}
+        for i = 1, GetNumSpecializations() do
+            local specId, specName = GetSpecializationInfo(i)
+            if specId then
+                table.insert(specs, { specId = specId, specName = specName })
+            end
+        end
+        return specs
+    end
+
+    local specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
+    specDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
+    UIDropDownMenu_SetWidth(specDropdown, 130)
+
+    local function SelectSpec(specId, specName)
+        filters.specId = specId
+        UIDropDownMenu_SetText(specDropdown, specName)
+        RebuildFilteredResults()
+    end
+
+    UIDropDownMenu_Initialize(specDropdown, function(_self, level)
+        for _, spec in ipairs(GetAvailableSpecs()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = spec.specName
+            info.func = function() SelectSpec(spec.specId, spec.specName) end
+            info.checked = (filters.specId == spec.specId)
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    local defaultSpecId, defaultSpecName = Where2GoDirectDrop.GetCurrentSpecIdAndName()
+    filters.specId = defaultSpecId
+    if defaultSpecId then
+        UIDropDownMenu_SetText(specDropdown, defaultSpecName)
+    end
 
     -- Dungeon/raid row. `bossRow` is declared before `dungeonButtons` is
     -- built, since dungeonButtons' OnClick closures capture it by
