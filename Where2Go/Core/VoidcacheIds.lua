@@ -12,6 +12,14 @@
 --
 -- Do not hand-edit without re-verifying on Wowhead. Refresh procedure:
 -- docs/SEASON_CHECKLIST.md.
+--
+-- Any edit to this file (or to Sources.lua's item pools), including a
+-- mid-season correction, requires bumping Where2GoConstants.SEASON_LABEL
+-- in Core/Constants.lua to force a re-scan. Where2GoCharDB.specEligibility's
+-- staleness check only compares against SEASON_LABEL, and absence from a
+-- cached bySpec[specId] means "ineligible" (not "unknown") -- so without
+-- a SEASON_LABEL bump, a newly-added item would show as ineligible for
+-- the rest of the season until the next full season bump.
 
 Where2GoVoidcacheIds = {}
 

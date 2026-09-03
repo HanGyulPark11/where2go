@@ -1,7 +1,11 @@
 -- Assembles the real ranked direct-drop content list: current-spec
--- detection, live C_Item.GetItemSpecInfo eligibility, item name lookup,
--- and calls Where2GoRanking.RankContent. WoW-API-dependent; not
--- unit-tested (Where2GoRanking carries the pure ranking math this feeds).
+-- detection, item eligibility (IsEligibleForSpec below consults
+-- Where2GoCharDB.specEligibility -- built by Core/SpecEligibilityScan.lua
+-- -- first when available, falling back to the live
+-- C_Item.GetItemSpecInfo/IsEquippableItem heuristic otherwise), item
+-- name lookup, and calls Where2GoRanking.RankContent. WoW-API-dependent;
+-- not unit-tested (Where2GoRanking carries the pure ranking math this
+-- feeds).
 --
 -- BuildContentList/GetCurrentSpecIdAndName/IsEligibleForSpec are public
 -- (not local) so Core/VoidcoreDrop.lua can reuse them instead of
@@ -74,7 +78,7 @@ function Where2GoDirectDrop.IsEligibleForSpec(specId)
         -- fallback below cannot (see
         -- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md).
         local cache = Where2GoCharDB.specEligibility
-        if cache and cache.seasonVersion == Where2GoConstants.SEASON_LABEL and cache.bySpec[specId] then
+        if cache and cache.seasonVersion == Where2GoConstants.SEASON_LABEL and cache.bySpec and cache.bySpec[specId] and next(cache.bySpec[specId]) ~= nil then
             return cache.bySpec[specId][itemId] == true
         end
 

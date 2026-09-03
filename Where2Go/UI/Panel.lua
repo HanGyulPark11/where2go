@@ -206,7 +206,7 @@ function Where2Go_TogglePanel()
     if panelFrame:IsShown() then
         panelFrame:Hide()
     else
-        Where2GoSpecEligibilityScan.SetProgressCallback(HandleScanProgress)
+        Where2GoSpecEligibilityScan.SetProgressCallback("panel", HandleScanProgress)
         Where2GoSpecEligibilityScan.EnsureScanned()
         RefreshContent()
         panelFrame:Show()

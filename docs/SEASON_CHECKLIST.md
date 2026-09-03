@@ -39,6 +39,11 @@ earlier ones are done.
    `Where2GoVoidcacheIds.DUNGEONS`/`RAID_BOSSES` with the new
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
+   - This edit (like any edit to this file or to `Sources.lua`'s item
+     pools) requires step 8's `SEASON_LABEL` bump to force a re-scan —
+     `Where2GoCharDB.specEligibility`'s staleness check only compares
+     against `SEASON_LABEL`, and a missed bump would leave newly-added
+     items showing as ineligible until the next full season bump.
 
 5. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
    updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
@@ -84,9 +89,9 @@ earlier ones are done.
    raid content, or remove it if no longer meaningful.
 
 10. **Run the full test suite and commit.**
-   ```
-   "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
-   ```
-   Confirm all specs pass before committing the updated `Sources.lua`,
-   `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`, and
-   `sources_spec.lua` together.
+    ```
+    "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
+    ```
+    Confirm all specs pass before committing the updated `Sources.lua`,
+    `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`,
+    `Where2Go/Core/VoidcacheIds.lua`, and `sources_spec.lua` together.

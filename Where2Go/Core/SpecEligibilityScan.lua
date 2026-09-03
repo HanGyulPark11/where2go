@@ -52,15 +52,22 @@ local SPEC_CHANGE_DELAY = 1.2
 local MAX_RETRIES = 5
 
 local _state = nil
-local _progressCallback = nil
+local _progressCallbacks = {}
 
-function Where2GoSpecEligibilityScan.SetProgressCallback(fn)
-    _progressCallback = fn
+-- Registry keyed by an arbitrary caller-chosen name (e.g. "panel",
+-- "browser") rather than a single slot, so multiple UI panels can each
+-- register their own callback without one overwriting another's -- both
+-- stay in sync regardless of which panel triggered the scan or which is
+-- currently visible. Registering under the same name again (e.g. every
+-- time a panel is shown) simply overwrites that caller's own entry, so
+-- it's safe to call on every show.
+function Where2GoSpecEligibilityScan.SetProgressCallback(name, fn)
+    _progressCallbacks[name] = fn
 end
 
 local function NotifyProgress(specName, current, total, finishedReason)
-    if _progressCallback then
-        _progressCallback(specName, current, total, finishedReason)
+    for _, fn in pairs(_progressCallbacks) do
+        fn(specName, current, total, finishedReason)
     end
 end
 
@@ -82,9 +89,16 @@ end
 -- Every item ID Sources.lua tracks -- the pool a scanned item name needs
 -- to resolve against to recover its numeric item ID (tooltips only give
 -- names). Requires the item cache to be warm; an item whose name isn't
--- cached yet at scan time is silently skipped for this scan, the same
--- accepted limitation Core/DirectDrop.lua's own header already notes
--- for a cold item cache.
+-- cached yet at scan time is silently skipped for this scan. Unlike
+-- Core/DirectDrop.lua's own cold-cache limitation -- which is
+-- recomputed on every render and so self-heals naturally as the item
+-- cache warms up during normal play -- this scan's result is written
+-- once to Where2GoCharDB.specEligibility (persistent SavedVariables)
+-- and isn't revisited until the next season's SEASON_LABEL bump, so a
+-- cold-cache failure here does NOT self-heal the same way. The actual
+-- mitigation is FinalizeScan's empty-result guard below, which refuses
+-- to persist a scan whose name resolution came back empty rather than
+-- silently writing bad (all-ineligible) data.
 local function CollectAllPoolItemIds()
     local ids = {}
     for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
@@ -140,31 +154,57 @@ local function FinalizeScan()
     if not _state then
         return
     end
+
+    -- Built here rather than at Start() time: by the time the full scan
+    -- (all specs/items, ~40 seconds) has finished, the
+    -- RequestLoadItemDataByID calls issued in Start() have had plenty of
+    -- time to resolve, so this name cache is built against a warm item
+    -- cache instead of the cold one that's present the instant Start()
+    -- is called.
+    local nameToItemId = BuildNameToItemId()
+
     local bySpec = {}
+    local coldCacheFailure = false
     for _, specEntry in ipairs(_state.specs) do
         local nameSet = _state.results[specEntry.specId] or {}
         local itemSet = {}
         for name in pairs(nameSet) do
-            local itemId = _state.nameToItemId[name]
+            local itemId = nameToItemId[name]
             if itemId then
                 itemSet[itemId] = true
             end
         end
+        -- Cold-cache failure signature: real tooltip data came back
+        -- (parsed item names were collected) but none of those names
+        -- resolved to a known item ID, meaning the item cache was cold
+        -- during BuildNameToItemId. Persisting this would permanently
+        -- mark this spec ineligible for everything with no recovery
+        -- path (see CollectAllPoolItemIds's comment above).
+        if next(nameSet) ~= nil and next(itemSet) == nil then
+            coldCacheFailure = true
+        end
         bySpec[specEntry.specId] = itemSet
     end
 
-    Where2GoCharDB.specEligibility = {
-        seasonVersion = Where2GoConstants.SEASON_LABEL,
-        scannedAt = time(),
-        bySpec = bySpec,
-    }
+    if not coldCacheFailure then
+        Where2GoCharDB.specEligibility = {
+            seasonVersion = Where2GoConstants.SEASON_LABEL,
+            scannedAt = time(),
+            bySpec = bySpec,
+        }
+    end
+    -- else: leave Where2GoCharDB.specEligibility untouched -- any
+    -- previous (stale but non-empty) scan keeps being used, or if there
+    -- was none, IsEligibleForSpec correctly falls through to the old
+    -- heuristic. seasonVersion won't have been written/updated, so the
+    -- next EnsureScanned() call (next panel open) will retry the scan.
 
     if _combatFrame then
         _combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
         _combatFrame:UnregisterEvent("PLAYER_LOOT_SPEC_UPDATED")
     end
     SetLootSpecialization(_state.originalLootSpec or 0)
-    NotifyProgress(nil, nil, nil, "COMPLETE")
+    NotifyProgress(nil, nil, nil, coldCacheFailure and "ABORTED_NAME_RESOLUTION" or "COMPLETE")
     _state = nil
 end
 
@@ -233,6 +273,14 @@ ScanStep = function()
     end)
 
     if not ok then
+        -- Surface the actual error via WoW's global error handler (the
+        -- standard addon idiom -- routes to whatever error-display
+        -- addon/console the player has, same as an unhandled Lua error
+        -- would) so a live failure here is diagnosable instead of
+        -- silently retrying on every subsequent panel open. This only
+        -- runs from inside C_Timer.After callbacks, a WoW-only API, so
+        -- it never executes under the plain-Lua test harness.
+        geterrorhandler()(err)
         AbortScan("ABORTED_ERROR")
     end
 end
@@ -276,7 +324,6 @@ function Where2GoSpecEligibilityScan.Start()
         specSwitchDone = false,
         expectingSpecChange = false,
         results = {},
-        nameToItemId = BuildNameToItemId(),
         originalLootSpec = GetLootSpecialization(),
     }
 

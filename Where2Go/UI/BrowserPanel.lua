@@ -5,6 +5,15 @@ local filters = { dungeonName = nil, bossName = nil, slot = nil, stats = {}, spe
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
 local scanStatusText
+local specDropdown
+
+-- True once the player has explicitly picked a spec from the dropdown
+-- (set inside SelectSpec below). Until then, filters.specId tracks the
+-- player's actual current spec (re-derived on every panel show by
+-- SyncDefaultSpec), so it follows respecs and picks up a spec chosen
+-- after the panel was first created with none selected. Once the player
+-- picks explicitly, that choice sticks for the rest of the session.
+local userSelectedSpec = false
 
 -- Forward declaration (same pattern UI/Panel.lua uses for `Layout`):
 -- Task 2 Step 3 assigns a filter-only stub; Task 3 Step 1 replaces that
@@ -160,6 +169,19 @@ RebuildFilteredResults = function()
     RefreshVisibleRows()
 end
 
+-- Re-derives filters.specId (and the dropdown's displayed text) from
+-- the player's actual current spec. Called once at panel creation, and
+-- again on every panel show (Where2GoBrowserPanel.Toggle) as long as the
+-- player hasn't explicitly picked a spec from the dropdown -- see
+-- userSelectedSpec above.
+local function SyncDefaultSpec()
+    local specId, specName = Where2GoDirectDrop.GetCurrentSpecIdAndName()
+    filters.specId = specId
+    if specId and specDropdown then
+        UIDropDownMenu_SetText(specDropdown, specName)
+    end
+end
+
 local function CreateBrowserPanel()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:SetSize(700, 720)
@@ -232,11 +254,12 @@ local function CreateBrowserPanel()
         return specs
     end
 
-    local specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
+    specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
     specDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
     UIDropDownMenu_SetWidth(specDropdown, 130)
 
     local function SelectSpec(specId, specName)
+        userSelectedSpec = true
         filters.specId = specId
         UIDropDownMenu_SetText(specDropdown, specName)
         RebuildFilteredResults()
@@ -252,11 +275,7 @@ local function CreateBrowserPanel()
         end
     end)
 
-    local defaultSpecId, defaultSpecName = Where2GoDirectDrop.GetCurrentSpecIdAndName()
-    filters.specId = defaultSpecId
-    if defaultSpecId then
-        UIDropDownMenu_SetText(specDropdown, defaultSpecName)
-    end
+    SyncDefaultSpec()
 
     -- Dungeon/raid row. `bossRow` is declared before `dungeonButtons` is
     -- built, since dungeonButtons' OnClick closures capture it by
@@ -330,7 +349,7 @@ local function CreateBrowserPanel()
     eligibleCheckbox:SetPoint("TOPLEFT", statRow, "BOTTOMLEFT", 0, -26)
     local eligibleLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     eligibleLabel:SetPoint("LEFT", eligibleCheckbox, "RIGHT", 2, 0)
-    eligibleLabel:SetText("Current spec eligible only")
+    eligibleLabel:SetText("Selected spec eligible only")
     eligibleCheckbox:SetScript("OnClick", function(self)
         filters.specEligibleOnly = self:GetChecked() and true or false
         RebuildFilteredResults()
@@ -469,8 +488,11 @@ function Where2GoBrowserPanel.Toggle()
     if browserFrame:IsShown() then
         browserFrame:Hide()
     else
-        Where2GoSpecEligibilityScan.SetProgressCallback(HandleScanProgress)
+        Where2GoSpecEligibilityScan.SetProgressCallback("browser", HandleScanProgress)
         Where2GoSpecEligibilityScan.EnsureScanned()
+        if not userSelectedSpec then
+            SyncDefaultSpec()
+        end
         RebuildFilteredResults()
         browserFrame:Show()
     end
