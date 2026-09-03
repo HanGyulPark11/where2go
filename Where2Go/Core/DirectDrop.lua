@@ -67,6 +67,16 @@ end
 
 function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
+        -- Gate on basic class/weapon-type equippability first:
+        -- GetItemSpecInfo returning empty is ambiguous between "no
+        -- restriction" (universal items like necklaces) and "not
+        -- applicable, this class can't equip this item type at all"
+        -- (e.g. a bow for a non-Hunter) -- IsEquippableItem disambiguates
+        -- the second case directly from the live client, no static data
+        -- needed.
+        if C_Item.IsEquippableItem(itemId) == false then
+            return false
+        end
         local specTable = C_Item.GetItemSpecInfo(itemId)
         -- C_Item.GetItemSpecInfo returning nil is ambiguous between "no
         -- spec restriction" and "not yet cached by the client" -- on a
