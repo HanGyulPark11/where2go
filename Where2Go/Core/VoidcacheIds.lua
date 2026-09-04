@@ -13,13 +13,16 @@
 -- Do not hand-edit without re-verifying on Wowhead. Refresh procedure:
 -- docs/SEASON_CHECKLIST.md.
 --
--- Any edit to this file (or to Sources.lua's item pools), including a
--- mid-season correction, requires bumping Where2GoConstants.SEASON_LABEL
--- in Core/Constants.lua to force a re-scan. Where2GoCharDB.specEligibility's
--- staleness check only compares against SEASON_LABEL, and absence from a
--- cached bySpec[specId] means "ineligible" (not "unknown") -- so without
--- a SEASON_LABEL bump, a newly-added item would show as ineligible for
--- the rest of the season until the next full season bump.
+-- A mid-season edit to this file (or to Sources.lua's item pools) requires
+-- re-running the /where2go genspec regeneration and hand-merge for every
+-- affected class -- see docs/SEASON_CHECKLIST.md step 5 for the procedure.
+-- Absence from Core/SpecEligibilityData.lua's BY_SPEC[specId] means
+-- "ineligible" (not "unknown"), so a newly-added item shows as ineligible
+-- until it's regenerated. Where2GoConstants.SEASON_LABEL does NOT drive
+-- this -- it no longer triggers any scan. Bumping it mid-season only trips
+-- Where2GoDB.specEligibilityExport's season-staleness guard, which blocks
+-- further /where2go genspec runs until a `genspec reset` throws away any
+-- in-progress accumulated export data.
 
 Where2GoVoidcacheIds = {}
 

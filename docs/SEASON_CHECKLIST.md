@@ -39,11 +39,16 @@ earlier ones are done.
    `Where2GoVoidcacheIds.DUNGEONS`/`RAID_BOSSES` with the new
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
-   - This edit (like any edit to this file or to `Sources.lua`'s item
-     pools) requires step 9's `SEASON_LABEL` bump to force a re-scan —
-     `Where2GoCharDB.specEligibility`'s staleness check only compares
-     against `SEASON_LABEL`, and a missed bump would leave newly-added
-     items showing as ineligible until the next full season bump.
+   - A mid-season edit to this file or to `Sources.lua`'s item pools
+     requires re-running step 5's `/where2go genspec` regeneration and
+     hand-merge for every affected class — a newly-added item has no
+     `BY_SPEC[specId]` entry yet, and absence means "ineligible", not
+     "unknown", until it's regenerated. Do **not** bump `SEASON_LABEL`
+     to try to force this: that field no longer triggers anything for
+     spec-eligibility data, and bumping it mid-season will trip
+     `Where2GoDB.specEligibilityExport`'s season-staleness guard and
+     block further `/where2go genspec` runs until a `genspec reset`
+     throws away any in-progress accumulated export data.
 
 5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** This depends
    on step 4's refreshed `VoidcacheIds.lua`, so do it right after. Run

@@ -19,6 +19,9 @@ for _, relPath in ipairs(referencedFiles) do
     if f then
         f:close()
     end
+
+    local chunk, loadErr = loadfile(fsPath)
+    assert(chunk, string.format("toc references %s but it does not parse: %s", relPath, tostring(loadErr)))
 end
 
 -- Order assertion: Core/Constants.lua must load before Fixtures.lua, Init.lua,
@@ -72,5 +75,5 @@ for _, fsRelPath in ipairs(filesystemFiles) do
         string.format("found %s on disk but it is not referenced in %s", fsRelPath, tocPath))
 end
 
-print("toc_spec: OK, " .. #referencedFiles .. " file(s) verified, " ..
+print("toc_spec: OK, " .. #referencedFiles .. " file(s) verified and parsed OK, " ..
     #filesystemFiles .. " filesystem file(s) confirmed present in TOC, load order OK")
