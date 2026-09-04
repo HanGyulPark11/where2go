@@ -5,6 +5,7 @@ local specs = {
     "tests/compare_spec.lua",
     "tests/sources_spec.lua",
     "tests/voidcacheids_spec.lua",
+    "tests/specEligibilityData_spec.lua",
     "tests/itemstats_spec.lua",
     "tests/raidranks_spec.lua",
     "tests/ranking_spec.lua",
