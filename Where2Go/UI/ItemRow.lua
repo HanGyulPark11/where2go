@@ -57,7 +57,7 @@ end
 -- next reopened, matching this file's pre-existing behavior.
 function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
     local name, _, quality = C_Item.GetItemInfo(itemId)
-    local icon = C_Item.GetItemIcon(itemId)
+    local icon = C_Item.GetItemIconByID(itemId)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
     local color = quality and ITEM_QUALITY_COLORS[quality]
