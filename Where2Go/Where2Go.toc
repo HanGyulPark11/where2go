@@ -23,5 +23,6 @@ Core\SpecEligibilityScan.lua
 Core\Compare.lua
 Core\Equipment.lua
 Core\Init.lua
+UI\ItemRow.lua
 UI\Panel.lua
 UI\BrowserPanel.lua
