@@ -1,13 +1,21 @@
--- Scans the "Nebulous Voidcache" tooltip for each of the player's own
--- class's specializations to build an authoritative
--- Where2GoCharDB.specEligibility table, consumed by
--- Core/DirectDrop.lua's IsEligibleForSpec. See
--- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md.
+-- Scans the "Nebulous Voidcache" tooltip for each of the current
+-- character's class's specializations. Historically (Phase 7) this ran
+-- automatically for every player and cached its result per-character;
+-- as of Phase 8 it is a maintainer-only tool triggered by
+-- `/where2go genspec`, merging its result into the account-wide
+-- Where2GoDB.specEligibilityExport table for manual hand-merging into
+-- the committed Core/SpecEligibilityData.lua (consumed by
+-- Core/DirectDrop.lua's IsEligibleForSpec). See
+-- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md
+-- (original scan design) and
+-- docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md
+-- (export/generation workflow).
 --
--- ParseTooltipLines below is pure (no WoW API) and unit-tested in
--- tests/specEligibilityScan_spec.lua. The scan state machine that calls
--- it is WoW-API-dependent like Core/VoidcoreDrop.lua/VoidcoreHistory.lua
--- -- not unit-tested, verified live instead.
+-- ParseTooltipLines, MergeBySpec, and CheckExportSeasonStale below are
+-- pure (no WoW API) and unit-tested in tests/specEligibilityScan_spec.lua.
+-- The scan state machine that calls them is WoW-API-dependent like
+-- Core/VoidcoreDrop.lua/VoidcoreHistory.lua -- not unit-tested, verified
+-- live instead.
 
 Where2GoSpecEligibilityScan = {}
 
@@ -44,6 +52,30 @@ function Where2GoSpecEligibilityScan.ParseTooltipLines(lines)
         end
     end
     return items
+end
+
+-- Pure: merges a scan pass's per-spec results into the existing export
+-- table's bySpec, replacing any spec entries this pass actually scanned
+-- (a full re-scan of a spec supersedes its old result entirely, so a
+-- since-removed item can't linger) while leaving every other spec's
+-- previously accumulated entries untouched. Does not mutate either
+-- argument.
+function Where2GoSpecEligibilityScan.MergeBySpec(existingBySpec, newBySpec)
+    local merged = {}
+    for specId, itemSet in pairs(existingBySpec or {}) do
+        merged[specId] = itemSet
+    end
+    for specId, itemSet in pairs(newBySpec or {}) do
+        merged[specId] = itemSet
+    end
+    return merged
+end
+
+-- Pure: true if `export` (Where2GoDB.specEligibilityExport) carries data
+-- from a season other than `currentSeasonLabel`. A nil export, or one
+-- with no seasonVersion yet, is never stale (nothing to conflict with).
+function Where2GoSpecEligibilityScan.CheckExportSeasonStale(export, currentSeasonLabel)
+    return export ~= nil and export.seasonVersion ~= nil and export.seasonVersion ~= currentSeasonLabel
 end
 
 local RETRY_DELAY = 0.35

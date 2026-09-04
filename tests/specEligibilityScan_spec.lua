@@ -45,4 +45,26 @@ local noiseCount = 0
 for _ in pairs(parsedNoise) do noiseCount = noiseCount + 1 end
 assert(noiseCount == 1, "should ignore non-prefixed lines, got " .. noiseCount .. " entries")
 
+-- MergeBySpec: adds new specs, preserves untouched existing specs,
+-- fully replaces any spec this pass actually scanned.
+local merged1 = Where2GoSpecEligibilityScan.MergeBySpec(nil, { [71] = { [100] = true } })
+assert(merged1[71][100] == true, "should merge into a nil existing table")
+
+local existingBySpec = { [71] = { [100] = true }, [72] = { [200] = true } }
+local merged2 = Where2GoSpecEligibilityScan.MergeBySpec(existingBySpec, { [73] = { [300] = true } })
+assert(merged2[71][100] == true, "should preserve untouched existing spec 71")
+assert(merged2[72][200] == true, "should preserve untouched existing spec 72")
+assert(merged2[73][300] == true, "should add new spec 73")
+
+local replaced = Where2GoSpecEligibilityScan.MergeBySpec(existingBySpec, { [71] = { [999] = true } })
+assert(replaced[71][999] == true, "should replace spec 71 wholesale with the new scan's result")
+assert(replaced[71][100] == nil, "should not keep spec 71's stale old item after a full re-scan of that spec")
+assert(replaced[72][200] == true, "should still preserve untouched spec 72")
+
+-- CheckExportSeasonStale: nil export or matching season is never stale;
+-- a season mismatch is stale.
+assert(Where2GoSpecEligibilityScan.CheckExportSeasonStale(nil, "S2") == false, "nil export is never stale")
+assert(Where2GoSpecEligibilityScan.CheckExportSeasonStale({ seasonVersion = "S2" }, "S2") == false, "matching season is not stale")
+assert(Where2GoSpecEligibilityScan.CheckExportSeasonStale({ seasonVersion = "S1" }, "S2") == true, "mismatched season is stale")
+
 print("specEligibilityScan_spec: OK")
