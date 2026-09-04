@@ -35,6 +35,9 @@ Where2GoLocale.STRINGS = {
         CLEAR_BUTTON = "Clear",
         CANCEL_BUTTON = "Cancel",
         SEARCH_PLACEHOLDER = "Search...",
+        SLOT_DROPDOWN_ALL = "All Slots",
+        STAT_DROPDOWN_ALL = "All Stats",
+        SPEC_DROPDOWN_ALL = "All Specs",
     },
     koKR = {
         BROWSER_TITLE = "Where2Go - 아이템 탐색기",
@@ -57,6 +60,9 @@ Where2GoLocale.STRINGS = {
         CLEAR_BUTTON = "삭제",
         CANCEL_BUTTON = "취소",
         SEARCH_PLACEHOLDER = "검색...",
+        SLOT_DROPDOWN_ALL = "모든 부위",
+        STAT_DROPDOWN_ALL = "모든 스탯",
+        SPEC_DROPDOWN_ALL = "모든 전문화",
     },
 }
 
@@ -75,6 +81,21 @@ Where2GoLocale.SLOT_LABELS = {
     },
 }
 
+-- STAT_LABELS: full-ish name for filter UI (the stat dropdown's option
+-- text). STAT_ABBREV: short form for the compact item-row summary line
+-- ("344 · Crit/Haste"). Korean stat names are already short in common
+-- usage, so both tables use the same koKR text -- only enUS shortens
+-- further for the summary line ("Versatility" -> "Vers").
+Where2GoLocale.STAT_LABELS = {
+    enUS = { CRIT_RATING = "Crit", HASTE_RATING = "Haste", MASTERY_RATING = "Mastery", VERSATILITY = "Versatility" },
+    koKR = { CRIT_RATING = "치명타", HASTE_RATING = "가속", MASTERY_RATING = "특화", VERSATILITY = "유연성" },
+}
+
+Where2GoLocale.STAT_ABBREV = {
+    enUS = { CRIT_RATING = "Crit", HASTE_RATING = "Haste", MASTERY_RATING = "Mastery", VERSATILITY = "Vers" },
+    koKR = { CRIT_RATING = "치명타", HASTE_RATING = "가속", MASTERY_RATING = "특화", VERSATILITY = "유연성" },
+}
+
 -- Guarded: GetLocale is a WoW API global, absent in the plain-Lua test
 -- harness. Falls back to enUS there rather than erroring at load time.
 local activeLocale = (type(GetLocale) == "function" and GetLocale() == "koKR") and "koKR" or "enUS"
@@ -87,4 +108,12 @@ end
 
 function Where2GoLocale.SlotLabel(slot)
     return Where2GoLocale.SLOT_LABELS[activeLocale][slot] or Where2GoLocale.SLOT_LABELS.enUS[slot] or slot
+end
+
+function Where2GoLocale.StatLabel(stat)
+    return Where2GoLocale.STAT_LABELS[activeLocale][stat] or Where2GoLocale.STAT_LABELS.enUS[stat] or stat
+end
+
+function Where2GoLocale.StatAbbrev(stat)
+    return Where2GoLocale.STAT_ABBREV[activeLocale][stat] or Where2GoLocale.STAT_ABBREV.enUS[stat] or stat
 end

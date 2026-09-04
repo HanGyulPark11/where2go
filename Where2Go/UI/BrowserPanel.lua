@@ -1,31 +1,21 @@
 local browserFrame
 local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
 local itemPool
-local filters = { sources = {}, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil, specId = nil }
+local filters = { sources = {}, slot = nil, stats = {}, specEligibleOnly = true, searchText = nil, specIds = {} }
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
 local specDropdown
 local sourceDropdown
-
--- True once the player has explicitly picked a spec from the dropdown
--- (set inside SelectSpec below). Until then, filters.specId tracks the
--- player's actual current spec (re-derived on every panel show by
--- SyncDefaultSpec), so it follows respecs and picks up a spec chosen
--- after the panel was first created with none selected. Once the player
--- picks explicitly, that choice sticks for the rest of the session.
-local userSelectedSpec = false
+local slotDropdown
+local statDropdown
 
 -- Forward declarations (same pattern UI/Panel.lua uses for `Layout`).
 local RebuildFilteredResults
 local RefreshStagedRows
 local RefreshPreferredRows
 
-local slotButtons = {}
-local statCheckboxes = {}
-
 local SLOT_ORDER = { "HEAD", "NECK", "SHOULDER", "BACK", "CHEST", "WRIST", "HANDS", "WAIST", "LEGS", "FEET", "FINGER", "TRINKET", "MAINHAND", "OFFHAND" }
 local STAT_ORDER = { "CRIT_RATING", "HASTE_RATING", "MASTERY_RATING", "VERSATILITY" }
-local STAT_LABELS = { CRIT_RATING = "Crit", HASTE_RATING = "Haste", MASTERY_RATING = "Mastery", VERSATILITY = "Versatility" }
 
 local ROW_HEIGHT = 34
 local ICON_SIZE = 26
@@ -37,11 +27,41 @@ local function GetItemSlot(itemId)
     return equipLoc and Where2GoConstants.EQUIPLOC_TO_SLOT[equipLoc]
 end
 
-local function GetItemEligible(itemId)
-    if not filters.specId then
-        return true
+-- The player's own class's specs (GetSpecialization's own scoping) --
+-- used both by the multi-select spec dropdown and by GetItemEligible's
+-- "nothing explicitly selected" fallback below.
+local function GetAvailableSpecs()
+    local specs = {}
+    for i = 1, GetNumSpecializations() do
+        local specId, specName = GetSpecializationInfo(i)
+        if specId then
+            table.insert(specs, { specId = specId, specName = specName })
+        end
     end
-    return Where2GoDirectDrop.IsEligibleForSpec(filters.specId)(itemId)
+    return specs
+end
+
+-- An item is eligible if AT LEAST ONE relevant spec can use it (union,
+-- not intersection). "Relevant" is the player's explicit spec selection
+-- if any is checked, otherwise every spec of the player's own class --
+-- so leaving the dropdown untouched shows anything any of your specs
+-- could use, not just your currently active one.
+local function GetItemEligible(itemId)
+    local specIds = filters.specIds
+    if specIds and next(specIds) ~= nil then
+        for specId in pairs(specIds) do
+            if Where2GoDirectDrop.IsEligibleForSpec(specId)(itemId) then
+                return true
+            end
+        end
+        return false
+    end
+    for _, spec in ipairs(GetAvailableSpecs()) do
+        if Where2GoDirectDrop.IsEligibleForSpec(spec.specId)(itemId) then
+            return true
+        end
+    end
+    return false
 end
 
 local function GetItemName(itemId)
@@ -77,47 +97,6 @@ end
 
 local function IsPreferred(itemId)
     return Where2GoCharDB.preferredItems[currentMode][itemId] == true
-end
-
--- A row of mutually-exclusive toggle buttons (only one active at a time,
--- or none). `onSelect` is called with the selected value (or nil if the
--- currently-active button is clicked again, deselecting it). Returns the
--- button table and the row's actual total height (including wrapping),
--- so callers can space the next row by the real height instead of a
--- guessed constant.
-local function CreateToggleButtonRow(parent, values, labelFn, onSelect, maxWidth)
-    local buttons = {}
-    local selectedValue = nil
-    local x, y = 0, 0
-    for _, value in ipairs(values) do
-        if maxWidth and x + 90 > maxWidth then
-            x = 0
-            y = y - 24
-        end
-        local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        button:SetSize(90, 20)
-        button:SetPoint("TOPLEFT", x, y)
-        button:SetText(labelFn(value))
-        button:SetScript("OnClick", function()
-            if selectedValue == value then
-                selectedValue = nil
-            else
-                selectedValue = value
-            end
-            for v, btn in pairs(buttons) do
-                if v == selectedValue then
-                    btn:LockHighlight()
-                else
-                    btn:UnlockHighlight()
-                end
-            end
-            onSelect(selectedValue)
-        end)
-        buttons[value] = button
-        x = x + 94
-    end
-    local totalHeight = (-y) + 20
-    return buttons, totalHeight
 end
 
 local resultRows = {}
@@ -217,19 +196,6 @@ RefreshPreferredRows = function()
     end
 end
 
--- Re-derives filters.specId (and the dropdown's displayed text) from
--- the player's actual current spec. Called once at panel creation, and
--- again on every panel show (Where2GoBrowserPanel.Toggle) as long as the
--- player hasn't explicitly picked a spec from the dropdown -- see
--- userSelectedSpec above.
-local function SyncDefaultSpec()
-    local specId, specName = Where2GoDirectDrop.GetCurrentSpecIdAndName()
-    filters.specId = specId
-    if specId and specDropdown then
-        UIDropDownMenu_SetText(specDropdown, specName)
-    end
-end
-
 local function UpdateSourceDropdownText()
     local count = 0
     for _ in pairs(filters.sources) do
@@ -320,6 +286,13 @@ local function CreateBrowserPanel()
                 filters.sources[key] = (filters.sources[key] == true) and nil or true
                 UpdateSourceDropdownText()
                 RebuildFilteredResults()
+                -- UIDropDownMenu's own click-time checkmark toggling is
+                -- unreliable across repeated clicks on the same open
+                -- menu (WoW-client-version-dependent) -- force a redraw
+                -- from the real source of truth (filters.sources) every
+                -- time instead of trusting the button's own internal
+                -- toggle state.
+                UIDropDownMenu_Refresh(sourceDropdown)
             end
             UIDropDownMenu_AddButton(info, level)
         end
@@ -337,53 +310,105 @@ local function CreateBrowserPanel()
     end)
     UpdateSourceDropdownText()
 
-    -- Slot row
-    local slotRow = CreateFrame("Frame", nil, frame)
-    slotRow:SetPoint("TOPLEFT", 12, -72)
-    slotRow:SetSize(836, 20)
-    local slotRowHeight
-    slotButtons, slotRowHeight = CreateToggleButtonRow(slotRow, SLOT_ORDER, Where2GoLocale.SlotLabel, function(selected)
-        filters.slot = selected
-        RebuildFilteredResults()
-    end, 820)
+    -- Slot filter dropdown (single-select, replaces the old multi-row
+    -- toggle-button grid).
+    slotDropdown = CreateFrame("Frame", "Where2GoBrowserSlotDropdown", frame, "UIDropDownMenuTemplate")
+    slotDropdown:SetPoint("TOPLEFT", -4, -72)
+    UIDropDownMenu_SetWidth(slotDropdown, 130)
 
-    -- Stat checkbox row (multi-select)
-    local statRow = CreateFrame("Frame", nil, frame)
-    statRow:SetPoint("TOPLEFT", slotRow, "BOTTOMLEFT", 0, -(slotRowHeight + 10))
-    statRow:SetSize(836, 20)
-    local statX = 0
-    for _, stat in ipairs(STAT_ORDER) do
-        local checkbox = CreateFrame("CheckButton", nil, statRow, "UICheckButtonTemplate")
-        checkbox:SetSize(20, 20)
-        checkbox:SetPoint("TOPLEFT", statX, 0)
-        local label = statRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("LEFT", checkbox, "RIGHT", 2, 0)
-        label:SetText(STAT_LABELS[stat])
-        checkbox:SetScript("OnClick", function(self)
-            filters.stats = filters.stats or {}
-            if self:GetChecked() then
-                table.insert(filters.stats, stat)
-            else
-                for i, s in ipairs(filters.stats) do
-                    if s == stat then
-                        table.remove(filters.stats, i)
-                        break
-                    end
-                end
-            end
-            RebuildFilteredResults()
-        end)
-        statCheckboxes[stat] = checkbox
-        statX = statX + 90
+    local function UpdateSlotDropdownText()
+        if filters.slot then
+            UIDropDownMenu_SetText(slotDropdown, Where2GoLocale.SlotLabel(filters.slot))
+        else
+            UIDropDownMenu_SetText(slotDropdown, Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
+        end
     end
 
-    -- Spec-eligible-only checkbox, paired with the spec selector dropdown
-    -- directly next to it (moved here from its old spot near the mode
-    -- toggle, per the locked-in "these two controls work as a pair"
-    -- decision).
+    UIDropDownMenu_Initialize(slotDropdown, function(_self, level)
+        local allInfo = UIDropDownMenu_CreateInfo()
+        allInfo.text = Where2GoLocale.L("SLOT_DROPDOWN_ALL")
+        allInfo.checked = (filters.slot == nil)
+        allInfo.func = function()
+            filters.slot = nil
+            UpdateSlotDropdownText()
+            RebuildFilteredResults()
+        end
+        UIDropDownMenu_AddButton(allInfo, level)
+
+        for _, slot in ipairs(SLOT_ORDER) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = Where2GoLocale.SlotLabel(slot)
+            info.checked = (filters.slot == slot)
+            info.func = function()
+                filters.slot = slot
+                UpdateSlotDropdownText()
+                RebuildFilteredResults()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UpdateSlotDropdownText()
+
+    -- Stat filter dropdown (multi-select, AND semantics preserved -- an
+    -- item must have ALL checked stats, see Core/ItemBrowser.lua's
+    -- matchesFilters, unchanged by this task).
+    statDropdown = CreateFrame("Frame", "Where2GoBrowserStatDropdown", frame, "UIDropDownMenuTemplate")
+    statDropdown:SetPoint("LEFT", slotDropdown, "RIGHT", 20, 0)
+    UIDropDownMenu_SetWidth(statDropdown, 130)
+
+    local function IsStatSelected(stat)
+        for _, s in ipairs(filters.stats) do
+            if s == stat then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function UpdateStatDropdownText()
+        local count = #filters.stats
+        if count == 0 then
+            UIDropDownMenu_SetText(statDropdown, Where2GoLocale.L("STAT_DROPDOWN_ALL"))
+        else
+            UIDropDownMenu_SetText(statDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
+        end
+    end
+
+    UIDropDownMenu_Initialize(statDropdown, function(_self, level)
+        for _, stat in ipairs(STAT_ORDER) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = Where2GoLocale.StatLabel(stat)
+            info.isNotRadio = true
+            info.keepShownOnClick = true
+            info.checked = IsStatSelected(stat)
+            info.func = function()
+                if IsStatSelected(stat) then
+                    for i, s in ipairs(filters.stats) do
+                        if s == stat then
+                            table.remove(filters.stats, i)
+                            break
+                        end
+                    end
+                else
+                    table.insert(filters.stats, stat)
+                end
+                UpdateStatDropdownText()
+                RebuildFilteredResults()
+                UIDropDownMenu_Refresh(statDropdown)
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UpdateStatDropdownText()
+
+    -- Spec-eligible-only checkbox (defaults to checked), paired with the
+    -- multi-select spec dropdown directly next to it (moved here from
+    -- its old spot near the mode toggle, per the locked-in "these two
+    -- controls work as a pair" decision).
     local eligibleCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     eligibleCheckbox:SetSize(20, 20)
-    eligibleCheckbox:SetPoint("TOPLEFT", statRow, "BOTTOMLEFT", 0, -26)
+    eligibleCheckbox:SetPoint("TOPLEFT", slotDropdown, "BOTTOMLEFT", 16, -16)
+    eligibleCheckbox:SetChecked(true)
     local eligibleLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     eligibleLabel:SetPoint("LEFT", eligibleCheckbox, "RIGHT", 2, 0)
     eligibleLabel:SetText(Where2GoLocale.L("ELIGIBLE_ONLY"))
@@ -392,39 +417,42 @@ local function CreateBrowserPanel()
         RebuildFilteredResults()
     end)
 
-    local function GetAvailableSpecs()
-        local specs = {}
-        for i = 1, GetNumSpecializations() do
-            local specId, specName = GetSpecializationInfo(i)
-            if specId then
-                table.insert(specs, { specId = specId, specName = specName })
-            end
-        end
-        return specs
-    end
-
+    -- Multi-select spec dropdown: nothing checked means "any spec of my
+    -- class" (GetItemEligible's own fallback above), not "my current
+    -- active spec only".
     specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
     specDropdown:SetPoint("LEFT", eligibleLabel, "RIGHT", 12, -2)
     UIDropDownMenu_SetWidth(specDropdown, 130)
 
-    local function SelectSpec(specId, specName)
-        userSelectedSpec = true
-        filters.specId = specId
-        UIDropDownMenu_SetText(specDropdown, specName)
-        RebuildFilteredResults()
+    local function UpdateSpecDropdownText()
+        local count = 0
+        for _ in pairs(filters.specIds) do
+            count = count + 1
+        end
+        if count == 0 then
+            UIDropDownMenu_SetText(specDropdown, Where2GoLocale.L("SPEC_DROPDOWN_ALL"))
+        else
+            UIDropDownMenu_SetText(specDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
+        end
     end
 
     UIDropDownMenu_Initialize(specDropdown, function(_self, level)
         for _, spec in ipairs(GetAvailableSpecs()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = spec.specName
-            info.func = function() SelectSpec(spec.specId, spec.specName) end
-            info.checked = (filters.specId == spec.specId)
+            info.isNotRadio = true
+            info.keepShownOnClick = true
+            info.checked = filters.specIds[spec.specId] == true
+            info.func = function()
+                filters.specIds[spec.specId] = (filters.specIds[spec.specId] == true) and nil or true
+                UpdateSpecDropdownText()
+                RebuildFilteredResults()
+                UIDropDownMenu_Refresh(specDropdown)
+            end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-
-    SyncDefaultSpec()
+    UpdateSpecDropdownText()
 
     -- Search box
     local searchLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -623,9 +651,6 @@ function Where2GoBrowserPanel.Toggle()
     if browserFrame:IsShown() then
         browserFrame:Hide()
     else
-        if not userSelectedSpec then
-            SyncDefaultSpec()
-        end
         RebuildFilteredResults()
         RefreshPreferredRows()
         browserFrame:Show()

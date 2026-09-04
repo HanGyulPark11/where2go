@@ -11,11 +11,6 @@
 
 Where2GoItemRow = {}
 
-Where2GoItemRow.STAT_ABBREV = {
-    CRIT_RATING = "Crit", HASTE_RATING = "Haste",
-    MASTERY_RATING = "Mastery", VERSATILITY = "Vers",
-}
-
 -- Builds the icon+name+summary sub-widgets on a fresh row frame. Callers
 -- create one row per pooled slot (matching this project's existing
 -- pooled-row pattern) and call this once at row creation, then call
@@ -68,7 +63,7 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
     local itemStats = Where2GoItemStats.STATS[itemId]
     if itemStats then
         for _, stat in ipairs(itemStats.secondaryStats) do
-            table.insert(statLabels, Where2GoItemRow.STAT_ABBREV[stat] or stat)
+            table.insert(statLabels, Where2GoLocale.StatAbbrev(stat))
         end
     end
     local statText = #statLabels > 0 and table.concat(statLabels, "/") or ""
