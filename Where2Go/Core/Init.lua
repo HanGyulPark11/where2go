@@ -103,6 +103,86 @@ local function HandleCompareCommand()
     end
 end
 
+local _lastGenspecSpecName
+
+local function HandleGenspecProgress(specName, _current, _total, finishedReason)
+    if finishedReason then
+        _lastGenspecSpecName = nil
+        if finishedReason == "COMPLETE" then
+            print("Where2Go: genspec scan complete -- log out to flush SavedVariables, then hand-merge Where2GoDB.specEligibilityExport into Core/SpecEligibilityData.lua.")
+        elseif finishedReason == "ABORTED_NAME_RESOLUTION" then
+            print("Where2Go: genspec scan aborted -- item cache was cold. Try again after items have loaded (e.g. open your bags first).")
+        elseif finishedReason == "ABORTED_COMBAT" then
+            print("Where2Go: genspec scan aborted -- entered combat.")
+        elseif finishedReason == "ABORTED_MANUAL_SPEC_CHANGE" then
+            print("Where2Go: genspec scan aborted -- loot specialization was changed manually mid-scan.")
+        elseif finishedReason == "ABORTED_ERROR" then
+            print("Where2Go: genspec scan aborted due to an error -- see the error log.")
+        end
+        return
+    end
+    if specName ~= _lastGenspecSpecName then
+        _lastGenspecSpecName = specName
+        print(string.format("Where2Go: genspec scanning %s...", specName or "?"))
+    end
+end
+
+local function DescribeCurrentClassSpecs()
+    local names = {}
+    for i = 1, GetNumSpecializations() do
+        local _, specName = GetSpecializationInfo(i)
+        if specName then
+            table.insert(names, specName)
+        end
+    end
+    return names
+end
+
+local function HandleGenspecCommand(args)
+    local action = args[2]
+
+    if action == "reset" then
+        if not Where2GoDB.specEligibilityExport then
+            print("Where2Go: no genspec export data to reset.")
+            return
+        end
+        Where2GoDB.specEligibilityExport = nil
+        print("Where2Go: genspec export data cleared.")
+        return
+    end
+
+    if action then
+        print("Usage: /where2go genspec [reset]")
+        return
+    end
+
+    local _, className = UnitClass("player")
+    local specNames = DescribeCurrentClassSpecs()
+    print(string.format(
+        "Where2Go: about to scan %d spec(s) for %s (%s) -- make sure this is a throwaway/safe character, this will temporarily change your loot specialization.",
+        #specNames, className or "?", table.concat(specNames, ", ")))
+
+    Where2GoSpecEligibilityScan.SetProgressCallback("genspec", HandleGenspecProgress)
+    local ok, reason = Where2GoSpecEligibilityScan.Start()
+    if ok then
+        return
+    end
+
+    if reason == "STALE_SEASON" then
+        print(string.format(
+            "Where2Go: existing export data is from a previous season (%s) -- run '/where2go genspec reset' first, or it will be merged with the new season's data.",
+            Where2GoDB.specEligibilityExport.seasonVersion))
+    elseif reason == "RUNNING" then
+        print("Where2Go: a genspec scan is already running.")
+    elseif reason == "COMBAT" then
+        print("Where2Go: cannot start a genspec scan while in combat.")
+    elseif reason == "NO_SPECS" then
+        print("Where2Go: this character has no specializations to scan.")
+    elseif reason == "NO_ITEMS" then
+        print("Where2Go: no Voidcache items configured to scan (check VoidcacheIds.lua).")
+    end
+end
+
 SLASH_WHERE2GO1 = "/where2go"
 SLASH_WHERE2GO2 = "/w2g"
 SlashCmdList["WHERE2GO"] = function(msg)
@@ -114,9 +194,11 @@ SlashCmdList["WHERE2GO"] = function(msg)
         HandleCompareCommand()
     elseif subcommand == "browse" then
         Where2GoBrowserPanel.Toggle()
+    elseif subcommand == "genspec" then
+        HandleGenspecCommand(args)
     elseif not subcommand or subcommand == "" then
         Where2Go_TogglePanel()
     else
-        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse")
+        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset]")
     end
 end
