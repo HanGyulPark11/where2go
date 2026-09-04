@@ -124,13 +124,14 @@ end
 -- cached yet at scan time is silently skipped for this scan. Unlike
 -- Core/DirectDrop.lua's own cold-cache limitation -- which is
 -- recomputed on every render and so self-heals naturally as the item
--- cache warms up during normal play -- this scan's result is written
--- once to Where2GoCharDB.specEligibility (persistent SavedVariables)
--- and isn't revisited until the next season's SEASON_LABEL bump, so a
--- cold-cache failure here does NOT self-heal the same way. The actual
--- mitigation is FinalizeScan's empty-result guard below, which refuses
--- to persist a scan whose name resolution came back empty rather than
--- silently writing bad (all-ineligible) data.
+-- cache warms up during normal play -- this scan's result is merged
+-- into Where2GoDB.specEligibilityExport (persistent SavedVariables) and
+-- eventually hand-merged into the committed Core/SpecEligibilityData.lua,
+-- so a cold-cache failure here does NOT self-heal the same way. The
+-- actual mitigation is FinalizeScan's empty-result guard below, which
+-- refuses to persist a scan whose name resolution came back empty
+-- rather than silently writing bad (all-ineligible) data -- plus the
+-- manual eyeball-check step in the Phase 8 design doc's export workflow.
 local function CollectAllPoolItemIds()
     local ids = {}
     for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
@@ -219,17 +220,15 @@ local function FinalizeScan()
     end
 
     if not coldCacheFailure then
-        Where2GoCharDB.specEligibility = {
+        local existingBySpec = Where2GoDB.specEligibilityExport and Where2GoDB.specEligibilityExport.bySpec
+        Where2GoDB.specEligibilityExport = {
             seasonVersion = Where2GoConstants.SEASON_LABEL,
-            scannedAt = time(),
-            bySpec = bySpec,
+            bySpec = Where2GoSpecEligibilityScan.MergeBySpec(existingBySpec, bySpec),
         }
     end
-    -- else: leave Where2GoCharDB.specEligibility untouched -- any
-    -- previous (stale but non-empty) scan keeps being used, or if there
-    -- was none, IsEligibleForSpec correctly falls through to the old
-    -- heuristic. seasonVersion won't have been written/updated, so the
-    -- next EnsureScanned() call (next panel open) will retry the scan.
+    -- else: leave Where2GoDB.specEligibilityExport untouched -- this
+    -- pass's result is discarded rather than merging in bad
+    -- (all-ineligible) data; re-running /where2go genspec retries.
 
     if _combatFrame then
         _combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
@@ -324,6 +323,9 @@ function Where2GoSpecEligibilityScan.Start()
     if InCombatLockdown() then
         return false, "COMBAT"
     end
+    if Where2GoSpecEligibilityScan.CheckExportSeasonStale(Where2GoDB.specEligibilityExport, Where2GoConstants.SEASON_LABEL) then
+        return false, "STALE_SEASON"
+    end
 
     local numSpecs = GetNumSpecializations()
     local specs = {}
@@ -367,20 +369,6 @@ function Where2GoSpecEligibilityScan.Start()
     NotifyProgress(specs[1].specName, 0, #specs * #items, nil)
     C_Timer.After(0, ScanStep)
     return true
-end
-
-function Where2GoSpecEligibilityScan.EnsureScanned()
-    local cache = Where2GoCharDB.specEligibility
-    if cache and cache.seasonVersion == Where2GoConstants.SEASON_LABEL then
-        return
-    end
-    if Where2GoSpecEligibilityScan.IsRunning() then
-        return
-    end
-    if InCombatLockdown() then
-        return
-    end
-    Where2GoSpecEligibilityScan.Start()
 end
 
 if _combatFrame then
