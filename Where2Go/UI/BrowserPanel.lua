@@ -1,10 +1,11 @@
 local browserFrame
 local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
 local itemPool
-local filters = { dungeonName = nil, bossName = nil, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil, specId = nil }
+local filters = { sources = {}, slot = nil, stats = {}, specEligibleOnly = false, searchText = nil, specId = nil }
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
 local specDropdown
+local sourceDropdown
 
 -- True once the player has explicitly picked a spec from the dropdown
 -- (set inside SelectSpec below). Until then, filters.specId tracks the
@@ -14,22 +15,22 @@ local specDropdown
 -- picks explicitly, that choice sticks for the rest of the session.
 local userSelectedSpec = false
 
--- Forward declaration (same pattern UI/Panel.lua uses for `Layout`):
--- Task 2 Step 3 assigns a filter-only stub; Task 3 Step 1 replaces that
--- assignment with the real version that also refreshes the visible rows.
--- Every caller below (RebuildBossButtons, the mode toggle, every filter
--- control's OnClick) calls it by this same upvalue, so whichever body is
--- currently assigned is the one that runs -- no redefinition ambiguity.
+-- Forward declarations (same pattern UI/Panel.lua uses for `Layout`).
 local RebuildFilteredResults
+local RefreshStagedRows
+local RefreshPreferredRows
 
-local dungeonButtons = {}
-local bossButtons = {}
 local slotButtons = {}
 local statCheckboxes = {}
 
 local SLOT_ORDER = { "HEAD", "NECK", "SHOULDER", "BACK", "CHEST", "WRIST", "HANDS", "WAIST", "LEGS", "FEET", "FINGER", "TRINKET", "MAINHAND", "OFFHAND" }
 local STAT_ORDER = { "CRIT_RATING", "HASTE_RATING", "MASTERY_RATING", "VERSATILITY" }
 local STAT_LABELS = { CRIT_RATING = "Crit", HASTE_RATING = "Haste", MASTERY_RATING = "Mastery", VERSATILITY = "Versatility" }
+
+local ROW_HEIGHT = 34
+local ICON_SIZE = 26
+local RESULTS_WIDTH, STAGED_WIDTH, PREFERRED_WIDTH = 360, 200, 260
+local VISIBLE_ROWS, STAGED_VISIBLE_ROWS, PREFERRED_VISIBLE_ROWS = 10, 10, 10
 
 local function GetItemSlot(itemId)
     local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemId)
@@ -47,6 +48,18 @@ local function GetItemName(itemId)
     return Where2GoDirectDrop.GetItemNames({ itemId })[itemId]
 end
 
+-- Individual items don't carry a fixed ilvl in Sources.lua -- gear scales
+-- with the player's current Mythic+/raid track, the same way
+-- Core/DirectDrop.lua's BuildContentList already computes it per content.
+local function GetEntryIlvl(entry)
+    if entry.kind == "dungeon" then
+        local ilvl = Where2GoRaidRanks.GetMythicPlusIlvl()
+        return ilvl
+    end
+    local ilvl = Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
+    return ilvl
+end
+
 local function BuildContext()
     return {
         getSlot = GetItemSlot,
@@ -61,7 +74,10 @@ end
 
 -- A row of mutually-exclusive toggle buttons (only one active at a time,
 -- or none). `onSelect` is called with the selected value (or nil if the
--- currently-active button is clicked again, deselecting it).
+-- currently-active button is clicked again, deselecting it). Returns the
+-- button table and the row's actual total height (including wrapping),
+-- so callers can space the next row by the real height instead of a
+-- guessed constant.
 local function CreateToggleButtonRow(parent, values, labelFn, onSelect, maxWidth)
     local buttons = {}
     local selectedValue = nil
@@ -97,36 +113,6 @@ local function CreateToggleButtonRow(parent, values, labelFn, onSelect, maxWidth
     return buttons, totalHeight
 end
 
--- KNOWN LIMITATION: creates new button frames on every call rather than
--- pooling/reusing them (unlike the result row list, which does pool).
--- WoW frames are never destroyed, so this grows slowly with repeated
--- dungeon/raid clicks over a long session. Deliberately left as-is:
--- fixing it safely requires reworking this row's per-click
--- closure/highlight logic, and the real-world growth rate is slow
--- (~9 frames per click) relative to that risk. Revisit if it's ever
--- actually observed to matter.
-local function RebuildBossButtons(parent, dungeonOrRaid)
-    for _, btn in pairs(bossButtons) do
-        btn:Hide()
-    end
-    bossButtons = {}
-    if not dungeonOrRaid then
-        RebuildFilteredResults()
-        return
-    end
-    local bossNames = {}
-    for _, encounter in ipairs(dungeonOrRaid.encounters) do
-        table.insert(bossNames, encounter.name)
-    end
-    bossButtons = CreateToggleButtonRow(parent, bossNames, function(v) return v end, function(selected)
-        filters.bossName = selected
-        RebuildFilteredResults()
-    end, 660)
-    RebuildFilteredResults()
-end
-
-local ROW_HEIGHT = 20
-local VISIBLE_ROWS = 12
 local resultRows = {}
 local scrollOffset = 0
 
@@ -146,10 +132,7 @@ local function RefreshVisibleRows()
         if entry and row then
             row:Show()
             row.entry = entry
-            local prefix = entry.raidName and (entry.raidName .. " - ") or ""
-            local name = GetItemName(entry.itemId) or ("Item #" .. entry.itemId)
-            local preferredMark = IsPreferred(entry.itemId) and "|cff00ff00[preferred]|r " or ""
-            row.text:SetText(preferredMark .. prefix .. entry.contentName .. " / " .. entry.bossName .. ": " .. name)
+            Where2GoItemRow.Populate(row, entry.itemId, GetEntryIlvl(entry))
             row.checkbox:SetChecked(stagedSelection[entry.itemId] == true)
         elseif row then
             row:Hide()
@@ -166,6 +149,51 @@ RebuildFilteredResults = function()
     filteredResults = Where2GoItemBrowser.SortItems(unsorted, nil, BuildContext())
     ClampScrollOffset()
     RefreshVisibleRows()
+    RefreshStagedRows()
+end
+
+local stagedRows = {}
+
+RefreshStagedRows = function()
+    local items = {}
+    for itemId in pairs(stagedSelection) do
+        table.insert(items, itemId)
+    end
+    table.sort(items)
+    for i = 1, STAGED_VISIBLE_ROWS do
+        local row = stagedRows[i]
+        local itemId = items[i]
+        if itemId and row then
+            row:Show()
+            row.itemId = itemId
+            Where2GoItemRow.Populate(row, itemId, nil)
+        elseif row then
+            row:Hide()
+            row.itemId = nil
+        end
+    end
+end
+
+local preferredRows = {}
+
+RefreshPreferredRows = function()
+    local items = {}
+    for itemId in pairs(Where2GoCharDB.preferredItems[currentMode]) do
+        table.insert(items, itemId)
+    end
+    table.sort(items)
+    for i = 1, PREFERRED_VISIBLE_ROWS do
+        local row = preferredRows[i]
+        local itemId = items[i]
+        if itemId and row then
+            row:Show()
+            row.itemId = itemId
+            Where2GoItemRow.Populate(row, itemId, nil)
+        elseif row then
+            row:Hide()
+            row.itemId = nil
+        end
+    end
 end
 
 -- Re-derives filters.specId (and the dropdown's displayed text) from
@@ -181,9 +209,21 @@ local function SyncDefaultSpec()
     end
 end
 
+local function UpdateSourceDropdownText()
+    local count = 0
+    for _ in pairs(filters.sources) do
+        count = count + 1
+    end
+    if count == 0 then
+        UIDropDownMenu_SetText(sourceDropdown, Where2GoLocale.L("SOURCE_DROPDOWN_ALL"))
+    else
+        UIDropDownMenu_SetText(sourceDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
+    end
+end
+
 local function CreateBrowserPanel()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame:SetSize(700, 720)
+    frame:SetSize(860, 720)
     frame:SetPoint("CENTER")
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -204,17 +244,17 @@ local function CreateBrowserPanel()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 12, -12)
-    title:SetText("Where2Go - Item Browser")
+    title:SetText(Where2GoLocale.L("BROWSER_TITLE"))
 
     -- Drop/Voidcore mode toggle
     local dropButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     dropButton:SetSize(80, 20)
     dropButton:SetPoint("TOPLEFT", 12, -36)
-    dropButton:SetText("Drop")
+    dropButton:SetText(Where2GoLocale.L("MODE_DROP"))
     local voidcoreButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     voidcoreButton:SetSize(80, 20)
     voidcoreButton:SetPoint("LEFT", dropButton, "RIGHT", 6, 0)
-    voidcoreButton:SetText("Voidcore")
+    voidcoreButton:SetText(Where2GoLocale.L("MODE_VOIDCORE"))
     local function SetMode(mode)
         if mode == currentMode then
             return
@@ -229,87 +269,67 @@ local function CreateBrowserPanel()
         end
         stagedSelection = {}
         RebuildFilteredResults()
+        RefreshPreferredRows()
     end
     dropButton:SetScript("OnClick", function() SetMode("DROP") end)
     voidcoreButton:SetScript("OnClick", function() SetMode("VOIDCORE") end)
 
-    -- Spec selector dropdown, defaulting to the player's current active
-    -- spec. Browser-only -- DirectDrop's and VoidcoreDrop's own ranked
-    -- panels keep using only the character's actual current spec.
-    local function GetAvailableSpecs()
-        local specs = {}
-        for i = 1, GetNumSpecializations() do
-            local specId, specName = GetSpecializationInfo(i)
-            if specId then
-                table.insert(specs, { specId = specId, specName = specName })
-            end
-        end
-        return specs
-    end
+    -- Merged multi-select "Source" dropdown (replaces the old separate
+    -- Dungeon/Boss toggle-button rows). Reuses UIDropDownMenuTemplate's
+    -- native checkbox-item support (isNotRadio + keepShownOnClick) --
+    -- the same dropdown mechanism this file already uses for the
+    -- single-select spec dropdown below, just configured for multi-select.
+    sourceDropdown = CreateFrame("Frame", "Where2GoBrowserSourceDropdown", frame, "UIDropDownMenuTemplate")
+    sourceDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
+    UIDropDownMenu_SetWidth(sourceDropdown, 160)
 
-    specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
-    specDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
-    UIDropDownMenu_SetWidth(specDropdown, 130)
-
-    local function SelectSpec(specId, specName)
-        userSelectedSpec = true
-        filters.specId = specId
-        UIDropDownMenu_SetText(specDropdown, specName)
-        RebuildFilteredResults()
-    end
-
-    UIDropDownMenu_Initialize(specDropdown, function(_self, level)
-        for _, spec in ipairs(GetAvailableSpecs()) do
+    UIDropDownMenu_Initialize(sourceDropdown, function(_self, level)
+        local function AddGroupHeader(text)
             local info = UIDropDownMenu_CreateInfo()
-            info.text = spec.specName
-            info.func = function() SelectSpec(spec.specId, spec.specName) end
-            info.checked = (filters.specId == spec.specId)
+            info.text, info.isTitle, info.notCheckable = text, true, true
             UIDropDownMenu_AddButton(info, level)
         end
+        local function AddSourceOption(key, text)
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = text
+            info.isNotRadio = true
+            info.keepShownOnClick = true
+            info.checked = filters.sources[key] == true
+            info.func = function()
+                filters.sources[key] = (filters.sources[key] == true) and nil or true
+                UpdateSourceDropdownText()
+                RebuildFilteredResults()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+
+        AddGroupHeader(Where2GoLocale.L("SOURCE_GROUP_DUNGEONS"))
+        for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
+            AddSourceOption("dungeon:" .. dungeon.instanceId, dungeon.name)
+        end
+        for _, raid in ipairs(Where2GoSources.RAIDS) do
+            AddGroupHeader(raid.name)
+            for _, encounter in ipairs(raid.encounters) do
+                AddSourceOption("boss:" .. encounter.bossId, encounter.name)
+            end
+        end
     end)
-
-    SyncDefaultSpec()
-
-    -- Dungeon/raid row. `bossRow` is declared before `dungeonButtons` is
-    -- built, since dungeonButtons' OnClick closures capture it by
-    -- reference (a Lua local is only visible to code compiled after its
-    -- declaration -- declaring bossRow later would make those closures
-    -- silently resolve it as an undeclared global instead).
-    local dungeonRow = CreateFrame("Frame", nil, frame)
-    dungeonRow:SetPoint("TOPLEFT", 12, -64)
-    dungeonRow:SetSize(496, 20)
-
-    -- Boss row (populated once a dungeon/raid is selected)
-    local bossRow = CreateFrame("Frame", nil, frame)
-    bossRow:SetPoint("TOPLEFT", dungeonRow, "BOTTOMLEFT", 0, -56)
-    bossRow:SetSize(496, 20)
-
-    local dungeonAndRaidEntries = {}
-    for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
-        table.insert(dungeonAndRaidEntries, dungeon)
-    end
-    for _, raid in ipairs(Where2GoSources.RAIDS) do
-        table.insert(dungeonAndRaidEntries, raid)
-    end
-    dungeonButtons = CreateToggleButtonRow(dungeonRow, dungeonAndRaidEntries, function(d) return d.name end, function(selected)
-        filters.dungeonName = selected and selected.name or nil
-        filters.bossName = nil
-        RebuildBossButtons(bossRow, selected)
-    end, 660)
+    UpdateSourceDropdownText()
 
     -- Slot row
     local slotRow = CreateFrame("Frame", nil, frame)
-    slotRow:SetPoint("TOPLEFT", bossRow, "BOTTOMLEFT", 0, -56)
-    slotRow:SetSize(496, 20)
-    slotButtons = CreateToggleButtonRow(slotRow, SLOT_ORDER, function(s) return s end, function(selected)
+    slotRow:SetPoint("TOPLEFT", 12, -72)
+    slotRow:SetSize(836, 20)
+    local slotRowHeight
+    slotButtons, slotRowHeight = CreateToggleButtonRow(slotRow, SLOT_ORDER, Where2GoLocale.SlotLabel, function(selected)
         filters.slot = selected
         RebuildFilteredResults()
-    end, 660)
+    end, 820)
 
     -- Stat checkbox row (multi-select)
     local statRow = CreateFrame("Frame", nil, frame)
-    statRow:SetPoint("TOPLEFT", slotRow, "BOTTOMLEFT", 0, -56)
-    statRow:SetSize(496, 20)
+    statRow:SetPoint("TOPLEFT", slotRow, "BOTTOMLEFT", 0, -(slotRowHeight + 10))
+    statRow:SetSize(836, 20)
     local statX = 0
     for _, stat in ipairs(STAT_ORDER) do
         local checkbox = CreateFrame("CheckButton", nil, statRow, "UICheckButtonTemplate")
@@ -336,17 +356,54 @@ local function CreateBrowserPanel()
         statX = statX + 90
     end
 
-    -- Spec-eligible-only checkbox
+    -- Spec-eligible-only checkbox, paired with the spec selector dropdown
+    -- directly next to it (moved here from its old spot near the mode
+    -- toggle, per the locked-in "these two controls work as a pair"
+    -- decision).
     local eligibleCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     eligibleCheckbox:SetSize(20, 20)
     eligibleCheckbox:SetPoint("TOPLEFT", statRow, "BOTTOMLEFT", 0, -26)
     local eligibleLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     eligibleLabel:SetPoint("LEFT", eligibleCheckbox, "RIGHT", 2, 0)
-    eligibleLabel:SetText("Selected spec eligible only")
+    eligibleLabel:SetText(Where2GoLocale.L("ELIGIBLE_ONLY"))
     eligibleCheckbox:SetScript("OnClick", function(self)
         filters.specEligibleOnly = self:GetChecked() and true or false
         RebuildFilteredResults()
     end)
+
+    local function GetAvailableSpecs()
+        local specs = {}
+        for i = 1, GetNumSpecializations() do
+            local specId, specName = GetSpecializationInfo(i)
+            if specId then
+                table.insert(specs, { specId = specId, specName = specName })
+            end
+        end
+        return specs
+    end
+
+    specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
+    specDropdown:SetPoint("LEFT", eligibleLabel, "RIGHT", 12, -2)
+    UIDropDownMenu_SetWidth(specDropdown, 130)
+
+    local function SelectSpec(specId, specName)
+        userSelectedSpec = true
+        filters.specId = specId
+        UIDropDownMenu_SetText(specDropdown, specName)
+        RebuildFilteredResults()
+    end
+
+    UIDropDownMenu_Initialize(specDropdown, function(_self, level)
+        for _, spec in ipairs(GetAvailableSpecs()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = spec.specName
+            info.func = function() SelectSpec(spec.specId, spec.specName) end
+            info.checked = (filters.specId == spec.specId)
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    SyncDefaultSpec()
 
     -- Search box
     local searchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
@@ -358,22 +415,36 @@ local function CreateBrowserPanel()
         RebuildFilteredResults()
     end)
 
-    local listFrame = CreateFrame("Frame", nil, frame)
-    listFrame:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -12)
-    listFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
-    listFrame:SetHeight(VISIBLE_ROWS * ROW_HEIGHT)
-    listFrame:EnableMouseWheel(true)
-    listFrame:SetScript("OnMouseWheel", function(self, delta)
+    -- Three-column list area: Results | Staged | Preferred
+    local resultsHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    resultsHeader:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -16)
+    resultsHeader:SetText(Where2GoLocale.L("RESULTS_HEADER"))
+
+    local stagedHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    stagedHeader:SetPoint("TOPLEFT", resultsHeader, "TOPLEFT", RESULTS_WIDTH + 8, 0)
+    stagedHeader:SetText(Where2GoLocale.L("STAGED_HEADER"))
+
+    local preferredHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    preferredHeader:SetPoint("TOPLEFT", stagedHeader, "TOPLEFT", STAGED_WIDTH + 8, 0)
+    preferredHeader:SetText(Where2GoLocale.L("PREFERRED_HEADER"))
+
+    local listHeight = VISIBLE_ROWS * ROW_HEIGHT
+
+    local resultsFrame = CreateFrame("Frame", nil, frame)
+    resultsFrame:SetPoint("TOPLEFT", resultsHeader, "BOTTOMLEFT", 4, -6)
+    resultsFrame:SetSize(RESULTS_WIDTH, listHeight)
+    resultsFrame:EnableMouseWheel(true)
+    resultsFrame:SetScript("OnMouseWheel", function(self, delta)
         scrollOffset = scrollOffset - delta
         ClampScrollOffset()
         RefreshVisibleRows()
     end)
 
     for i = 1, VISIBLE_ROWS do
-        local row = CreateFrame("Frame", nil, listFrame)
+        local row = CreateFrame("Frame", nil, resultsFrame)
         row:SetHeight(ROW_HEIGHT)
         row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
-        row:SetPoint("RIGHT", listFrame, "RIGHT", 0, 0)
+        row:SetPoint("RIGHT", resultsFrame, "RIGHT", 0, 0)
 
         local checkbox = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         checkbox:SetSize(20, 20)
@@ -386,51 +457,95 @@ local function CreateBrowserPanel()
                 else
                     stagedSelection[r.entry.itemId] = nil
                 end
+                RefreshStagedRows()
             end
         end)
 
-        local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        text:SetPoint("LEFT", checkbox, "RIGHT", 4, 0)
-        text:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-        text:SetJustifyH("LEFT")
-        text:SetWordWrap(false)
+        Where2GoItemRow.CreateWidgets(row, ICON_SIZE, 24)
+        row.name:SetWidth(RESULTS_WIDTH - 24 - ICON_SIZE - 8)
+        row.summary:SetWidth(RESULTS_WIDTH - 24 - ICON_SIZE - 8)
 
         row.checkbox = checkbox
-        row.text = text
         resultRows[i] = row
+    end
+
+    local function CreateSideListRow(parent, width, onRemove)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetHeight(ROW_HEIGHT)
+
+        local removeButton = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+        removeButton:SetSize(16, 16)
+        removeButton:SetPoint("RIGHT", 0, 0)
+        removeButton:SetScript("OnClick", function()
+            if row.itemId then
+                onRemove(row.itemId)
+            end
+        end)
+
+        Where2GoItemRow.CreateWidgets(row, ICON_SIZE, 0)
+        row.name:SetWidth(width - ICON_SIZE - 16 - 8)
+        row.summary:SetWidth(width - ICON_SIZE - 16 - 8)
+        return row
+    end
+
+    local stagedFrame = CreateFrame("Frame", nil, frame)
+    stagedFrame:SetPoint("TOPLEFT", stagedHeader, "BOTTOMLEFT", 0, -6)
+    stagedFrame:SetSize(STAGED_WIDTH, listHeight)
+    for i = 1, STAGED_VISIBLE_ROWS do
+        local row = CreateSideListRow(stagedFrame, STAGED_WIDTH, function(itemId)
+            stagedSelection[itemId] = nil
+            RefreshStagedRows()
+            RefreshVisibleRows()
+        end)
+        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
+        row:SetPoint("RIGHT", stagedFrame, "RIGHT", 0, 0)
+        stagedRows[i] = row
+    end
+
+    local preferredFrame = CreateFrame("Frame", nil, frame)
+    preferredFrame:SetPoint("TOPLEFT", preferredHeader, "BOTTOMLEFT", 0, -6)
+    preferredFrame:SetSize(PREFERRED_WIDTH, listHeight)
+    for i = 1, PREFERRED_VISIBLE_ROWS do
+        local row = CreateSideListRow(preferredFrame, PREFERRED_WIDTH, function(itemId)
+            Where2GoCharDB.preferredItems[currentMode][itemId] = nil
+            RefreshPreferredRows()
+        end)
+        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
+        row:SetPoint("RIGHT", preferredFrame, "RIGHT", 0, 0)
+        preferredRows[i] = row
     end
 
     local addSelectedButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     addSelectedButton:SetSize(140, 22)
-    addSelectedButton:SetPoint("TOPLEFT", listFrame, "BOTTOMLEFT", 4, -12)
-    addSelectedButton:SetText("Add selected")
+    addSelectedButton:SetPoint("TOPLEFT", stagedFrame, "BOTTOMLEFT", 0, -12)
+    addSelectedButton:SetText(Where2GoLocale.L("ADD_SELECTED"))
     addSelectedButton:SetScript("OnClick", function()
         for itemId in pairs(stagedSelection) do
             Where2GoCharDB.preferredItems[currentMode][itemId] = true
         end
         stagedSelection = {}
         RebuildFilteredResults()
+        RefreshPreferredRows()
     end)
 
     local clearSelectionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     clearSelectionButton:SetSize(140, 22)
-    clearSelectionButton:SetPoint("LEFT", addSelectedButton, "RIGHT", 8, 0)
-    clearSelectionButton:SetText("Clear selection")
+    clearSelectionButton:SetPoint("TOPLEFT", addSelectedButton, "BOTTOMLEFT", 0, -6)
+    clearSelectionButton:SetText(Where2GoLocale.L("CLEAR_SELECTION"))
     clearSelectionButton:SetScript("OnClick", function()
         stagedSelection = {}
+        RefreshStagedRows()
         RefreshVisibleRows()
     end)
 
-    local clearPreferredButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    clearPreferredButton:SetSize(160, 22)
-    clearPreferredButton:SetPoint("LEFT", clearSelectionButton, "RIGHT", 8, 0)
-    clearPreferredButton:SetText("Clear preferred list")
-    clearPreferredButton:SetScript("OnClick", function()
+    local clearAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearAllButton:SetSize(140, 22)
+    clearAllButton:SetPoint("TOPLEFT", preferredFrame, "BOTTOMLEFT", 0, -12)
+    clearAllButton:SetText(Where2GoLocale.L("CLEAR_ALL"))
+    clearAllButton:SetScript("OnClick", function()
         StaticPopup_Show("WHERE2GO_CLEAR_PREFERRED")
     end)
 
-    frame.dungeonRow = dungeonRow
-    frame.bossRow = bossRow
     frame.searchBox = searchBox
     SetMode("DROP")
     frame:Hide()
@@ -438,12 +553,13 @@ local function CreateBrowserPanel()
 end
 
 StaticPopupDialogs["WHERE2GO_CLEAR_PREFERRED"] = {
-    text = "Remove every preferred item from the current list?",
-    button1 = "Clear",
-    button2 = "Cancel",
+    text = Where2GoLocale.L("CLEAR_PREFERRED_CONFIRM"),
+    button1 = Where2GoLocale.L("CLEAR_BUTTON"),
+    button2 = Where2GoLocale.L("CANCEL_BUTTON"),
     OnAccept = function()
         Where2GoCharDB.preferredItems[currentMode] = {}
         RebuildFilteredResults()
+        RefreshPreferredRows()
     end,
     timeout = 0,
     whileDead = true,
@@ -476,6 +592,7 @@ function Where2GoBrowserPanel.Toggle()
             SyncDefaultSpec()
         end
         RebuildFilteredResults()
+        RefreshPreferredRows()
         browserFrame:Show()
     end
 end
