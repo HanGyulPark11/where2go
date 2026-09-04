@@ -40,12 +40,39 @@ earlier ones are done.
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
    - This edit (like any edit to this file or to `Sources.lua`'s item
-     pools) requires step 8's `SEASON_LABEL` bump to force a re-scan —
+     pools) requires step 9's `SEASON_LABEL` bump to force a re-scan —
      `Where2GoCharDB.specEligibility`'s staleness check only compares
      against `SEASON_LABEL`, and a missed bump would leave newly-added
      items showing as ineligible until the next full season bump.
 
-5. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
+5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** This depends
+   on step 4's refreshed `VoidcacheIds.lua`, so do it right after. Run
+   `/where2go genspec reset` once to clear any leftover data from the
+   previous season. Then, for every class in the game, log into (or
+   create a throwaway) character of that class and run
+   `/where2go genspec` — it scans all of that character's own class
+   specs in one ~40-second pass and merges the result into
+   `Where2GoDB.specEligibilityExport`, which survives across
+   logins/characters until you reset it again. This is the slowest step
+   in this checklist (one full pass per class); it's fine to spread it
+   across as many sessions as needed since the data accumulates.
+
+   Once every class is scanned, log out to flush SavedVariables, open
+   `WTF/Account/<acct>/SavedVariables/Where2Go.lua`, and find the
+   `Where2GoDB.specEligibilityExport.bySpec` table. **Eyeball it before
+   copying anything**: every spec you scanned should have a plausible
+   non-empty item count (roughly similar across specs of the same
+   class) — a spec showing zero items usually means the item cache was
+   cold during that scan and needs re-running. Once it looks right,
+   hand-merge `bySpec`'s entries into
+   `Where2Go/Core/SpecEligibilityData.lua`'s `BY_SPEC` table (matching
+   this project's existing "human reviews the diff, never
+   auto-overwrite" convention for committed data files), and update the
+   file's own comment/history if useful context changed. See
+   `docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md`
+   for the full design rationale.
+
+6. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
    updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
    needs regenerating too. See `tools/data-prep/README.md` for credential
    setup (same as step 2). From the repo root:
@@ -56,7 +83,7 @@ earlier ones are done.
    `tools/data-prep/scratch/ItemStats.lua.new`'s content into
    `Where2Go/Core/ItemStats.lua`.
 
-6. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
+7. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
    no API equivalent. For the new raid, determine each boss's relative
    item-level rank (1-4) and whether any boss drops a special
    above-normal-cap track (like Season 2's Myth-9/6 final bosses), the
@@ -70,28 +97,28 @@ earlier ones are done.
    in-client measurement) still holds, and update those two by hand if
    not.
 
-7. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
+8. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
    bonus ID ranges (Veteran/Champion/Hero/Myth) changed this season —
    Blizzard sometimes shifts these between seasons. Also check each
    track's `ilvls = { ... }` array (the per-rank item levels), which
    changes essentially every season. Update by hand if so.
 
-8. **Update `Where2GoConstants.SEASON_LABEL`.** In
+9. **Update `Where2GoConstants.SEASON_LABEL`.** In
    `Where2Go/Core/Constants.lua`, update the `SEASON_LABEL` string (e.g.
    `"Midnight Season 2"`) to name the new season. This is a simple
    hand-edit, like the `RaidRanks.lua`/`Tracks.lua` steps above — there is
    no API for it.
 
-9. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
-   check near the bottom of the file (currently asserting `RAIDS[2]` is
-   "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
-   Replace it with an equivalent spot-check for the new season's actual
-   raid content, or remove it if no longer meaningful.
+10. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
+    check near the bottom of the file (currently asserting `RAIDS[2]` is
+    "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
+    Replace it with an equivalent spot-check for the new season's actual
+    raid content, or remove it if no longer meaningful.
 
-10. **Run the full test suite and commit.**
+11. **Run the full test suite and commit.**
     ```
     "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
     ```
     Confirm all specs pass before committing the updated `Sources.lua`,
     `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`,
-    `Where2Go/Core/VoidcacheIds.lua`, and `sources_spec.lua` together.
+    `Where2Go/Core/VoidcacheIds.lua`, `Where2Go/Core/SpecEligibilityData.lua`, and `sources_spec.lua` together.
