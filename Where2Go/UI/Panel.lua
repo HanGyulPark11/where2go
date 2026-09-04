@@ -3,7 +3,6 @@ local contentFrame
 local cardFrames = {}
 local Layout
 local currentView = "DROP"
-local scanStatusText
 
 local HEADER_HEIGHT = 62
 
@@ -164,12 +163,6 @@ local function CreatePanel()
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(Where2GoConstants.ADDON_NAME)
 
-    scanStatusText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    scanStatusText:SetPoint("BOTTOMLEFT", 6, 6)
-    scanStatusText:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
-    scanStatusText:SetJustifyH("LEFT")
-    scanStatusText:SetText("")
-
     CreateTab(frame, "Drop", "DROP", 12)
     CreateTab(frame, "Voidcore", "VOIDCORE", 96)
 
@@ -189,15 +182,6 @@ local function CreatePanel()
     return frame
 end
 
-local function HandleScanProgress(specName, current, total, finishedReason)
-    if finishedReason then
-        scanStatusText:SetText("")
-        RefreshContent()
-        return
-    end
-    scanStatusText:SetText(string.format("Where2Go: scanning spec eligibility... %d/%d (%s)", current or 0, total or 0, specName or ""))
-end
-
 function Where2Go_TogglePanel()
     if not panelFrame then
         panelFrame = CreatePanel()
@@ -206,8 +190,6 @@ function Where2Go_TogglePanel()
     if panelFrame:IsShown() then
         panelFrame:Hide()
     else
-        Where2GoSpecEligibilityScan.SetProgressCallback("panel", HandleScanProgress)
-        Where2GoSpecEligibilityScan.EnsureScanned()
         RefreshContent()
         panelFrame:Show()
     end
