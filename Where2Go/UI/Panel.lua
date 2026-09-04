@@ -29,24 +29,29 @@ local function CreateCard(parent, result)
     headerText:SetJustifyH("LEFT")
     headerText:SetWidth(336)
 
+    local ITEM_ROW_HEIGHT = 32
+    local ITEM_ICON_SIZE = 24
+    local ITEM_ROW_WIDTH = 324
+
     local itemRows = {}
-    local itemNames = Where2GoDirectDrop.GetItemNames(result.targetItemIds)
     local rowY = -18
     for _, itemId in ipairs(result.targetItemIds) do
-        local row = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local row = CreateFrame("Frame", nil, card)
         row:SetPoint("TOPLEFT", 12, rowY)
-        row:SetJustifyH("LEFT")
-        row:SetWidth(324)
-        row:SetText(itemNames[itemId])
+        row:SetSize(ITEM_ROW_WIDTH, ITEM_ROW_HEIGHT)
+        Where2GoItemRow.CreateWidgets(row, ITEM_ICON_SIZE, 0)
+        row.name:SetWidth(ITEM_ROW_WIDTH - ITEM_ICON_SIZE - 4)
+        row.summary:SetWidth(ITEM_ROW_WIDTH - ITEM_ICON_SIZE - 4)
+        Where2GoItemRow.Populate(row, itemId, result.ilvl)
         table.insert(itemRows, row)
-        rowY = rowY - 14
+        rowY = rowY - ITEM_ROW_HEIGHT
     end
 
     local cardData = {
         frame = card,
         expanded = true,
         collapsedHeight = 18,
-        expandedHeight = 18 + (#itemRows * 14),
+        expandedHeight = 18 + (#itemRows * ITEM_ROW_HEIGHT),
     }
     headerText:SetText(BuildHeaderText(result, cardData.expanded))
 
