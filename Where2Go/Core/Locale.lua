@@ -34,6 +34,7 @@ Where2GoLocale.STRINGS = {
         CLEAR_PREFERRED_CONFIRM = "Remove every preferred item from the current list?",
         CLEAR_BUTTON = "Clear",
         CANCEL_BUTTON = "Cancel",
+        SEARCH_PLACEHOLDER = "Search...",
     },
     koKR = {
         BROWSER_TITLE = "Where2Go - 아이템 탐색기",
@@ -55,6 +56,7 @@ Where2GoLocale.STRINGS = {
         CLEAR_PREFERRED_CONFIRM = "현재 목록의 모든 선호 아이템을 삭제할까요?",
         CLEAR_BUTTON = "삭제",
         CANCEL_BUTTON = "취소",
+        SEARCH_PLACEHOLDER = "검색...",
     },
 }
 

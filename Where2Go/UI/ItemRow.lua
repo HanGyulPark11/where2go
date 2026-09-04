@@ -45,10 +45,17 @@ end
 -- real GameTooltip. `ilvl` is the caller-computed effective item level
 -- for this item's source (nil is fine -- the summary line just omits it,
 -- used by Staged/Preferred rows which don't carry a single fixed
--- source). Cold-item-cache items show a placeholder icon/name and
--- self-heal the same way this project's existing name lookups already
--- do (the browser's GET_ITEM_INFO_RECEIVED watcher triggers a rebuild).
-function Where2GoItemRow.Populate(row, itemId, ilvl)
+-- source). `sourceLabel` (optional) is appended as an extra tooltip line
+-- -- e.g. which dungeon or raid boss drops this item -- kept out of the
+-- visible row text per this project's "no boss-name clutter" item-row
+-- goal, but still available on hover (see
+-- docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md).
+-- Cold-item-cache items show a placeholder icon/name; only
+-- UI/BrowserPanel.lua's Results rows self-heal automatically (its
+-- GET_ITEM_INFO_RECEIVED watcher triggers a rebuild) -- UI/Panel.lua's
+-- cards populate once per card build and refresh only when the panel is
+-- next reopened, matching this file's pre-existing behavior.
+function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
     local name, _, quality = C_Item.GetItemInfo(itemId)
     local icon = C_Item.GetItemIcon(itemId)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -77,6 +84,9 @@ function Where2GoItemRow.Populate(row, itemId, ilvl)
     row:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetItemByID(itemId)
+        if sourceLabel then
+            GameTooltip:AddLine(sourceLabel, 0.6, 0.6, 0.6)
+        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)

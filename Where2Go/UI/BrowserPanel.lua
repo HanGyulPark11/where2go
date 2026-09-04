@@ -60,6 +60,13 @@ local function GetEntryIlvl(entry)
     return ilvl
 end
 
+local function GetEntrySourceLabel(entry)
+    if entry.raidName then
+        return entry.raidName .. " - " .. entry.bossName
+    end
+    return entry.contentName
+end
+
 local function BuildContext()
     return {
         getSlot = GetItemSlot,
@@ -115,6 +122,8 @@ end
 
 local resultRows = {}
 local scrollOffset = 0
+local stagedScrollOffset = 0
+local preferredScrollOffset = 0
 
 local function ClampScrollOffset()
     local maxOffset = math.max(0, #filteredResults - VISIBLE_ROWS)
@@ -132,7 +141,7 @@ local function RefreshVisibleRows()
         if entry and row then
             row:Show()
             row.entry = entry
-            Where2GoItemRow.Populate(row, entry.itemId, GetEntryIlvl(entry))
+            Where2GoItemRow.Populate(row, entry.itemId, GetEntryIlvl(entry), GetEntrySourceLabel(entry))
             row.checkbox:SetChecked(stagedSelection[entry.itemId] == true)
         elseif row then
             row:Hide()
@@ -160,9 +169,15 @@ RefreshStagedRows = function()
         table.insert(items, itemId)
     end
     table.sort(items)
+    local maxOffset = math.max(0, #items - STAGED_VISIBLE_ROWS)
+    if stagedScrollOffset < 0 then
+        stagedScrollOffset = 0
+    elseif stagedScrollOffset > maxOffset then
+        stagedScrollOffset = maxOffset
+    end
     for i = 1, STAGED_VISIBLE_ROWS do
         local row = stagedRows[i]
-        local itemId = items[i]
+        local itemId = items[stagedScrollOffset + i]
         if itemId and row then
             row:Show()
             row.itemId = itemId
@@ -182,9 +197,15 @@ RefreshPreferredRows = function()
         table.insert(items, itemId)
     end
     table.sort(items)
+    local maxOffset = math.max(0, #items - PREFERRED_VISIBLE_ROWS)
+    if preferredScrollOffset < 0 then
+        preferredScrollOffset = 0
+    elseif preferredScrollOffset > maxOffset then
+        preferredScrollOffset = maxOffset
+    end
     for i = 1, PREFERRED_VISIBLE_ROWS do
         local row = preferredRows[i]
-        local itemId = items[i]
+        local itemId = items[preferredScrollOffset + i]
         if itemId and row then
             row:Show()
             row.itemId = itemId
@@ -406,6 +427,10 @@ local function CreateBrowserPanel()
     SyncDefaultSpec()
 
     -- Search box
+    local searchLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    searchLabel:SetPoint("BOTTOMLEFT", eligibleCheckbox, "TOPLEFT", 4, 30)
+    searchLabel:SetText(Where2GoLocale.L("SEARCH_PLACEHOLDER"))
+
     local searchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     searchBox:SetSize(150, 20)
     searchBox:SetPoint("TOPLEFT", eligibleCheckbox, "BOTTOMLEFT", 4, -26)
@@ -491,6 +516,11 @@ local function CreateBrowserPanel()
     local stagedFrame = CreateFrame("Frame", nil, frame)
     stagedFrame:SetPoint("TOPLEFT", stagedHeader, "BOTTOMLEFT", 0, -6)
     stagedFrame:SetSize(STAGED_WIDTH, listHeight)
+    stagedFrame:EnableMouseWheel(true)
+    stagedFrame:SetScript("OnMouseWheel", function(self, delta)
+        stagedScrollOffset = stagedScrollOffset - delta
+        RefreshStagedRows()
+    end)
     for i = 1, STAGED_VISIBLE_ROWS do
         local row = CreateSideListRow(stagedFrame, STAGED_WIDTH, function(itemId)
             stagedSelection[itemId] = nil
@@ -505,6 +535,11 @@ local function CreateBrowserPanel()
     local preferredFrame = CreateFrame("Frame", nil, frame)
     preferredFrame:SetPoint("TOPLEFT", preferredHeader, "BOTTOMLEFT", 0, -6)
     preferredFrame:SetSize(PREFERRED_WIDTH, listHeight)
+    preferredFrame:EnableMouseWheel(true)
+    preferredFrame:SetScript("OnMouseWheel", function(self, delta)
+        preferredScrollOffset = preferredScrollOffset - delta
+        RefreshPreferredRows()
+    end)
     for i = 1, PREFERRED_VISIBLE_ROWS do
         local row = CreateSideListRow(preferredFrame, PREFERRED_WIDTH, function(itemId)
             Where2GoCharDB.preferredItems[currentMode][itemId] = nil
