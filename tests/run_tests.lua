@@ -1,5 +1,6 @@
 local specs = {
     "tests/constants_spec.lua",
+    "tests/locale_spec.lua",
     "tests/toc_spec.lua",
     "tests/tracks_spec.lua",
     "tests/compare_spec.lua",
