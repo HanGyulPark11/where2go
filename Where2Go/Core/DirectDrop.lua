@@ -1,7 +1,8 @@
 -- Assembles the real ranked direct-drop content list: current-spec
--- detection, item eligibility (IsEligibleForSpec below consults
--- Where2GoCharDB.specEligibility -- built by Core/SpecEligibilityScan.lua
--- -- first when available, falling back to the live
+-- detection, item eligibility (IsEligibleForSpec below consults the
+-- committed Core/SpecEligibilityData.lua -- generated via
+-- Core/SpecEligibilityScan.lua's maintainer-only tooltip-scan tool --
+-- first when available, falling back to the live
 -- C_Item.GetItemSpecInfo/IsEquippableItem heuristic otherwise), item
 -- name lookup, and calls Where2GoRanking.RankContent. WoW-API-dependent;
 -- not unit-tested (Where2GoRanking carries the pure ranking math this
@@ -71,15 +72,17 @@ end
 
 function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
-        -- Prefer real scanned data (Core/SpecEligibilityScan.lua) when
-        -- available for this season and this spec: it's Blizzard's own
+        -- Prefer the committed, precomputed data (Core/SpecEligibilityData.lua,
+        -- generated via Core/SpecEligibilityScan.lua's tooltip-scan
+        -- technique and hand-merged in -- see
+        -- docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md)
+        -- when this spec has an entry: it's Blizzard's own
         -- server-computed loot table for the spec, not a heuristic, so
         -- it correctly rejects wrong-weapon/armor-type items the
-        -- fallback below cannot (see
-        -- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md).
-        local cache = Where2GoCharDB.specEligibility
-        if cache and cache.seasonVersion == Where2GoConstants.SEASON_LABEL and cache.bySpec and cache.bySpec[specId] and next(cache.bySpec[specId]) ~= nil then
-            return cache.bySpec[specId][itemId] == true
+        -- fallback below cannot.
+        local bySpec = Where2GoSpecEligibilityData.BY_SPEC[specId]
+        if bySpec and next(bySpec) ~= nil then
+            return bySpec[itemId] == true
         end
 
         -- Gate on basic class/weapon-type equippability first:
