@@ -17,6 +17,7 @@ function Where2GoItemBrowser.BuildItemPool()
                     contentName = dungeon.name,
                     raidName = nil,
                     kind = "dungeon",
+                    sourceKey = "dungeon:" .. dungeon.instanceId,
                 })
             end
         end
@@ -31,6 +32,7 @@ function Where2GoItemBrowser.BuildItemPool()
                     contentName = raid.name,
                     raidName = raid.name,
                     kind = "raid",
+                    sourceKey = "boss:" .. encounter.bossId,
                 })
             end
         end
@@ -43,10 +45,7 @@ local function matchesFilters(entry, filters, context)
     if not slot then
         return false
     end
-    if filters.dungeonName and entry.contentName ~= filters.dungeonName then
-        return false
-    end
-    if filters.bossName and entry.bossName ~= filters.bossName then
+    if filters.sources and next(filters.sources) ~= nil and not filters.sources[entry.sourceKey] then
         return false
     end
     if filters.slot and slot ~= filters.slot then

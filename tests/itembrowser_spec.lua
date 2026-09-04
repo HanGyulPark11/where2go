@@ -1,10 +1,10 @@
--- Fixture pool: 4 items across 2 dungeon bosses and 1 raid boss
+-- Fixture pool: 4 items across 2 dungeon bosses (same dungeon) and 1 raid boss
 local function fixturePool()
     return {
-        { itemId = 100, bossId = 1, bossName = "Boss A", contentName = "Dungeon One", raidName = nil, kind = "dungeon" },
-        { itemId = 101, bossId = 1, bossName = "Boss A", contentName = "Dungeon One", raidName = nil, kind = "dungeon" },
-        { itemId = 200, bossId = 2, bossName = "Boss B", contentName = "Dungeon One", raidName = nil, kind = "dungeon" },
-        { itemId = 300, bossId = 3, bossName = "Boss C", contentName = "Raid One", raidName = "Raid One", kind = "raid" },
+        { itemId = 100, bossId = 1, bossName = "Boss A", contentName = "Dungeon One", raidName = nil, kind = "dungeon", sourceKey = "dungeon:1" },
+        { itemId = 101, bossId = 1, bossName = "Boss A", contentName = "Dungeon One", raidName = nil, kind = "dungeon", sourceKey = "dungeon:1" },
+        { itemId = 200, bossId = 2, bossName = "Boss B", contentName = "Dungeon One", raidName = nil, kind = "dungeon", sourceKey = "dungeon:1" },
+        { itemId = 300, bossId = 3, bossName = "Boss C", contentName = "Raid One", raidName = "Raid One", kind = "raid", sourceKey = "boss:3" },
     }
 end
 
@@ -25,16 +25,30 @@ dofile("Where2Go/Core/ItemBrowser.lua")
 -- structural check below, not with fixtures (it has no parameters to
 -- inject fixture data through).
 
--- FilterItems: dungeon filter
+-- FilterItems: a dungeon source key selects that whole dungeon's items,
+-- regardless of which of its bosses dropped them (dungeons are a
+-- whole-run unit, not filtered per-boss)
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { dungeonName = "Raid One" }, fixtureContext())
-    assert(#results == 1 and results[1].itemId == 300, "dungeonName filter should isolate the raid boss's item")
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:1"] = true } }, fixtureContext())
+    assert(#results == 3, "dungeon:1 source key should return all 3 Dungeon One items across both its bosses")
 end
 
--- FilterItems: boss filter
+-- FilterItems: a raid boss source key selects only that boss's item
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { bossName = "Boss A" }, fixtureContext())
-    assert(#results == 2, "bossName filter should return both Boss A items")
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["boss:3"] = true } }, fixtureContext())
+    assert(#results == 1 and results[1].itemId == 300, "boss:3 source key should isolate the raid boss's item")
+end
+
+-- FilterItems: multiple selected source keys union together (OR, not AND)
+do
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:1"] = true, ["boss:3"] = true } }, fixtureContext())
+    assert(#results == 4, "selecting a dungeon key and a boss key together should return the union of both")
+end
+
+-- FilterItems: empty sources table means no filter
+do
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = {} }, fixtureContext())
+    assert(#results == 4, "an empty sources table should not filter anything out")
 end
 
 -- FilterItems: slot filter
@@ -82,14 +96,14 @@ end
 
 -- FilterItems: combined filters (AND logic)
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { dungeonName = "Dungeon One", slot = "TRINKET" }, fixtureContext())
-    assert(#results == 2, "combined dungeon+slot filter should AND together")
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:1"] = true }, slot = "TRINKET" }, fixtureContext())
+    assert(#results == 2, "combined source+slot filter should AND together")
 end
 
 -- FilterItems: no matches
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { dungeonName = "Nonexistent" }, fixtureContext())
-    assert(#results == 0, "an impossible filter should return an empty (not nil) array")
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:999"] = true } }, fixtureContext())
+    assert(#results == 0, "an impossible source key should return an empty (not nil) array")
 end
 
 -- FilterItems: items with no resolvable slot (non-equipment loot) are always excluded
@@ -131,5 +145,7 @@ for _, entry in ipairs(realPool) do
     assert(type(entry.itemId) == "number", "every pool entry should have a numeric itemId")
     assert(type(entry.bossName) == "string" and #entry.bossName > 0, "every pool entry should have a bossName")
     assert(type(entry.contentName) == "string" and #entry.contentName > 0, "every pool entry should have a contentName")
+    assert(type(entry.sourceKey) == "string" and entry.sourceKey:match("^dungeon:%d+$") or entry.sourceKey:match("^boss:%d+$"),
+        "every pool entry's sourceKey should match 'dungeon:<id>' or 'boss:<id>', got " .. tostring(entry.sourceKey))
 end
 print("itembrowser_spec: OK, " .. #realPool .. " real pool entries")
