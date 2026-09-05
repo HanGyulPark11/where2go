@@ -211,6 +211,21 @@ local function NSelectedText(count)
     return string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count)
 end
 
+-- Colors ported directly from the Phase 9 design mockup's CSS (dark
+-- stone/parchment + gold trim, WoW's own item-quality-adjacent palette).
+-- See docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md's
+-- mockup link. {r, g, b}, 0-1 floats for SetBackdropColor/SetTextColor.
+local COLORS = {
+    windowBg = { 0.078, 0.055, 0.031 },      -- #140e08
+    windowBorder = { 0.478, 0.353, 0.173 },  -- #7a5a2c
+    gold = { 0.941, 0.831, 0.533 },          -- #f0d488
+    mutedTan = { 0.541, 0.459, 0.314 },      -- #8a7550
+    toolbarBg = { 0.082, 0.059, 0.031 },     -- #150f08
+    toolbarBorder = { 0.251, 0.192, 0.102 }, -- #40311a
+    headerBg = { 0.110, 0.078, 0.035 },      -- #1c1409
+    panelBg = { 0.063, 0.043, 0.024 },       -- #100b06
+}
+
 local function CreateBrowserPanel()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:SetSize(860, 720)
@@ -223,10 +238,10 @@ local function CreateBrowserPanel()
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
+        edgeSize = 2,
     })
-    frame:SetBackdropColor(0, 0, 0, 1)
-    frame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+    frame:SetBackdropColor(unpack(COLORS.windowBg))
+    frame:SetBackdropBorderColor(unpack(COLORS.windowBorder))
 
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -4, -4)
@@ -235,6 +250,7 @@ local function CreateBrowserPanel()
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(Where2GoLocale.L("BROWSER_TITLE"))
+    title:SetTextColor(unpack(COLORS.gold))
 
     -- Drop/Voidcore mode toggle
     local dropButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -253,9 +269,13 @@ local function CreateBrowserPanel()
         if mode == "DROP" then
             dropButton:LockHighlight()
             voidcoreButton:UnlockHighlight()
+            dropButton:GetFontString():SetTextColor(unpack(COLORS.gold))
+            voidcoreButton:GetFontString():SetTextColor(1, 1, 1)
         else
             voidcoreButton:LockHighlight()
             dropButton:UnlockHighlight()
+            voidcoreButton:GetFontString():SetTextColor(unpack(COLORS.gold))
+            dropButton:GetFontString():SetTextColor(1, 1, 1)
         end
         stagedSelection = {}
         RebuildFilteredResults()
@@ -263,6 +283,22 @@ local function CreateBrowserPanel()
     end
     dropButton:SetScript("OnClick", function() SetMode("DROP") end)
     voidcoreButton:SetScript("OnClick", function() SetMode("VOIDCORE") end)
+
+    -- Filter toolbar: Source/Slot/Stat dropdowns grouped into one bordered
+    -- bar (matches the mockup's single "toolbar" box) instead of floating
+    -- independently at their own frame-relative anchors -- the layout
+    -- complaint this task fixes ("필터 버튼들의 위치가 너무 중구난방").
+    local toolbarFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    toolbarFrame:SetPoint("TOPLEFT", dropButton, "BOTTOMLEFT", 0, -8)
+    toolbarFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    toolbarFrame:SetHeight(34)
+    toolbarFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    toolbarFrame:SetBackdropColor(unpack(COLORS.toolbarBg))
+    toolbarFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
 
     -- Merged multi-select "Source" dropdown (replaces the old separate
     -- Dungeon/Boss toggle-button rows). Built on Blizzard's current
@@ -286,9 +322,9 @@ local function CreateBrowserPanel()
     -- confirmed live) and updated manually on every state change, same
     -- as the pre-migration pattern.
     -- See docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md.
-    sourceDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSourceDropdown", frame, "WowStyle1FilterDropdownTemplate")
-    sourceDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
-    sourceDropdown:SetWidth(160)
+    sourceDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSourceDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
+    sourceDropdown:SetPoint("LEFT", toolbarFrame, "LEFT", 8, 0)
+    sourceDropdown:SetWidth(220)
 
     local function UpdateSourceDropdownText()
         local count = CountSelected(filters.sources)
@@ -332,8 +368,8 @@ local function CreateBrowserPanel()
     -- Spec below, matching the user's explicit request that Slot behave
     -- like the other multi-select filters rather than a single-pick
     -- radio group).
-    slotDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSlotDropdown", frame, "WowStyle1FilterDropdownTemplate")
-    slotDropdown:SetPoint("TOPLEFT", -4, -72)
+    slotDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSlotDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
+    slotDropdown:SetPoint("LEFT", sourceDropdown, "RIGHT", 10, 0)
     slotDropdown:SetWidth(130)
 
     local function UpdateSlotDropdownText()
@@ -365,8 +401,8 @@ local function CreateBrowserPanel()
     -- Stat filter dropdown (multi-select, AND semantics preserved -- an
     -- item must have ALL checked stats, see Core/ItemBrowser.lua's
     -- matchesFilters, unchanged by this task).
-    statDropdown = CreateFrame("DropdownButton", "Where2GoBrowserStatDropdown", frame, "WowStyle1FilterDropdownTemplate")
-    statDropdown:SetPoint("LEFT", slotDropdown, "RIGHT", 20, 0)
+    statDropdown = CreateFrame("DropdownButton", "Where2GoBrowserStatDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
+    statDropdown:SetPoint("LEFT", slotDropdown, "RIGHT", 10, 0)
     statDropdown:SetWidth(130)
 
     local function IsStatSelected(stat)
@@ -409,13 +445,24 @@ local function CreateBrowserPanel()
     end)
     UpdateStatDropdownText()
 
+    -- Second filter row: Spec dropdown + "eligible only" checkbox + search
+    -- box, all in one row directly below the toolbar (mockup's "subrow") --
+    -- the search box stretches to fill the remaining width instead of
+    -- sitting in a narrow fixed-width box off to the side.
+    --
+    -- Multi-select spec dropdown: nothing checked means "any spec of my
+    -- class" (GetItemEligible's own fallback above), not "my current
+    -- active spec only".
+    specDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSpecDropdown", frame, "WowStyle1FilterDropdownTemplate")
+    specDropdown:SetPoint("TOPLEFT", toolbarFrame, "BOTTOMLEFT", 0, -10)
+    specDropdown:SetWidth(160)
+
     -- Spec-eligible-only checkbox (defaults to checked), paired with the
-    -- multi-select spec dropdown directly next to it (moved here from
-    -- its old spot near the mode toggle, per the locked-in "these two
-    -- controls work as a pair" decision).
+    -- spec dropdown directly next to it since the two controls work as a
+    -- pair (which spec, and whether to actually filter by it).
     local eligibleCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     eligibleCheckbox:SetSize(20, 20)
-    eligibleCheckbox:SetPoint("TOPLEFT", slotDropdown, "BOTTOMLEFT", 16, -16)
+    eligibleCheckbox:SetPoint("LEFT", specDropdown, "RIGHT", 16, 0)
     eligibleCheckbox:SetChecked(true)
     local eligibleLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     eligibleLabel:SetPoint("LEFT", eligibleCheckbox, "RIGHT", 2, 0)
@@ -424,13 +471,6 @@ local function CreateBrowserPanel()
         filters.specEligibleOnly = self:GetChecked() and true or false
         RebuildFilteredResults()
     end)
-
-    -- Multi-select spec dropdown: nothing checked means "any spec of my
-    -- class" (GetItemEligible's own fallback above), not "my current
-    -- active spec only".
-    specDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSpecDropdown", frame, "WowStyle1FilterDropdownTemplate")
-    specDropdown:SetPoint("LEFT", eligibleLabel, "RIGHT", 12, -2)
-    specDropdown:SetWidth(130)
 
     local function UpdateSpecDropdownText()
         local count = CountSelected(filters.specIds)
@@ -458,38 +498,54 @@ local function CreateBrowserPanel()
     end)
     UpdateSpecDropdownText()
 
-    -- Search box
+    -- Search box: label + box share the row with Spec/Eligible, box
+    -- stretches to the window's right edge instead of a narrow fixed box.
     local searchLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    searchLabel:SetPoint("BOTTOMLEFT", eligibleCheckbox, "TOPLEFT", 4, 30)
+    searchLabel:SetPoint("LEFT", eligibleLabel, "RIGHT", 16, 0)
     searchLabel:SetText(Where2GoLocale.L("SEARCH_PLACEHOLDER"))
 
     local searchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-    searchBox:SetSize(150, 20)
-    searchBox:SetPoint("TOPLEFT", eligibleCheckbox, "BOTTOMLEFT", 4, -26)
+    searchBox:SetHeight(20)
+    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 6, 0)
+    searchBox:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
     searchBox:SetAutoFocus(false)
     searchBox:SetScript("OnTextChanged", function(self)
         filters.searchText = self:GetText()
         RebuildFilteredResults()
     end)
 
-    -- Three-column list area: Results | Staged | Preferred
-    local resultsHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    resultsHeader:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -4, -16)
-    resultsHeader:SetText(Where2GoLocale.L("RESULTS_HEADER"))
+    -- Three-column list area: Results | Staged | Preferred. Each column
+    -- gets its own bordered/backgrounded header bar and list box (mockup's
+    -- boxed columns) instead of a bare FontString + unbordered frame.
+    local function CreateColumnHeader(anchorTo, anchorPoint, xOfs, yOfs, width, text)
+        local headerFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        headerFrame:SetPoint("TOPLEFT", anchorTo, anchorPoint, xOfs, yOfs)
+        headerFrame:SetSize(width, 20)
+        headerFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+        headerFrame:SetBackdropColor(unpack(COLORS.headerBg))
+        local headerText = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        headerText:SetPoint("LEFT", 6, 0)
+        headerText:SetTextColor(unpack(COLORS.mutedTan))
+        headerText:SetText(text)
+        return headerFrame
+    end
 
-    local stagedHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    stagedHeader:SetPoint("TOPLEFT", resultsHeader, "TOPLEFT", RESULTS_WIDTH + 8, 0)
-    stagedHeader:SetText(Where2GoLocale.L("STAGED_HEADER"))
-
-    local preferredHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    preferredHeader:SetPoint("TOPLEFT", stagedHeader, "TOPLEFT", STAGED_WIDTH + 8, 0)
-    preferredHeader:SetText(Where2GoLocale.L("PREFERRED_HEADER"))
+    local resultsHeader = CreateColumnHeader(specDropdown, "BOTTOMLEFT", 0, -14, RESULTS_WIDTH, Where2GoLocale.L("RESULTS_HEADER"))
+    local stagedHeader = CreateColumnHeader(resultsHeader, "TOPLEFT", RESULTS_WIDTH + 8, 0, STAGED_WIDTH, Where2GoLocale.L("STAGED_HEADER"))
+    local preferredHeader = CreateColumnHeader(stagedHeader, "TOPLEFT", STAGED_WIDTH + 8, 0, PREFERRED_WIDTH, Where2GoLocale.L("PREFERRED_HEADER"))
 
     local listHeight = VISIBLE_ROWS * ROW_HEIGHT
 
-    local resultsFrame = CreateFrame("Frame", nil, frame)
-    resultsFrame:SetPoint("TOPLEFT", resultsHeader, "BOTTOMLEFT", 4, -6)
+    local resultsFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    resultsFrame:SetPoint("TOPLEFT", resultsHeader, "BOTTOMLEFT", 0, -4)
     resultsFrame:SetSize(RESULTS_WIDTH, listHeight)
+    resultsFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    resultsFrame:SetBackdropColor(unpack(COLORS.panelBg))
+    resultsFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
     resultsFrame:EnableMouseWheel(true)
     resultsFrame:SetScript("OnMouseWheel", function(self, delta)
         scrollOffset = scrollOffset - delta
@@ -545,9 +601,16 @@ local function CreateBrowserPanel()
         return row
     end
 
-    local stagedFrame = CreateFrame("Frame", nil, frame)
-    stagedFrame:SetPoint("TOPLEFT", stagedHeader, "BOTTOMLEFT", 0, -6)
+    local stagedFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    stagedFrame:SetPoint("TOPLEFT", stagedHeader, "BOTTOMLEFT", 0, -4)
     stagedFrame:SetSize(STAGED_WIDTH, listHeight)
+    stagedFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    stagedFrame:SetBackdropColor(unpack(COLORS.panelBg))
+    stagedFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
     stagedFrame:EnableMouseWheel(true)
     stagedFrame:SetScript("OnMouseWheel", function(self, delta)
         stagedScrollOffset = stagedScrollOffset - delta
@@ -564,9 +627,16 @@ local function CreateBrowserPanel()
         stagedRows[i] = row
     end
 
-    local preferredFrame = CreateFrame("Frame", nil, frame)
-    preferredFrame:SetPoint("TOPLEFT", preferredHeader, "BOTTOMLEFT", 0, -6)
+    local preferredFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    preferredFrame:SetPoint("TOPLEFT", preferredHeader, "BOTTOMLEFT", 0, -4)
     preferredFrame:SetSize(PREFERRED_WIDTH, listHeight)
+    preferredFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    preferredFrame:SetBackdropColor(unpack(COLORS.panelBg))
+    preferredFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
     preferredFrame:EnableMouseWheel(true)
     preferredFrame:SetScript("OnMouseWheel", function(self, delta)
         preferredScrollOffset = preferredScrollOffset - delta

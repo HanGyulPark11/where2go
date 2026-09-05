@@ -6,6 +6,20 @@ local currentView = "DROP"
 
 local HEADER_HEIGHT = 62
 
+-- Same palette as UI/BrowserPanel.lua, ported from the Phase 9 design
+-- mockup's CSS (dark stone/parchment + gold trim). Duplicated locally
+-- rather than shared since both files' copies are a one-time port from
+-- the same fixed mockup values, not something expected to drift.
+local COLORS = {
+    windowBg = { 0.078, 0.055, 0.031 },      -- #140e08
+    windowBorder = { 0.478, 0.353, 0.173 },  -- #7a5a2c
+    gold = { 0.941, 0.831, 0.533 },          -- #f0d488
+    mutedTan = { 0.541, 0.459, 0.314 },      -- #8a7550
+    cardBg = { 0.063, 0.043, 0.024 },        -- #100b06
+    cardBorder = { 0.251, 0.192, 0.102 },    -- #40311a
+    cardHeadBg = { 0.102, 0.075, 0.035 },    -- #1a1309
+}
+
 local function BuildHeaderText(result, expanded)
     local mark = expanded and "[-]" or "[+]"
     local prefix = result.raidName and (result.raidName .. " - ") or ""
@@ -15,19 +29,29 @@ local function BuildHeaderText(result, expanded)
 end
 
 local function CreateCard(parent, result)
-    local card = CreateFrame("Frame", nil, parent)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     card:SetPoint("LEFT", parent, "LEFT", 0, 0)
     card:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+    card:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    card:SetBackdropColor(unpack(COLORS.cardBg))
+    card:SetBackdropBorderColor(unpack(COLORS.cardBorder))
 
-    local header = CreateFrame("Button", nil, card)
+    local header = CreateFrame("Button", nil, card, "BackdropTemplate")
     header:SetPoint("TOPLEFT", 0, 0)
     header:SetPoint("RIGHT", card, "RIGHT", 0, 0)
     header:SetHeight(18)
+    header:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    header:SetBackdropColor(unpack(COLORS.cardHeadBg))
 
     local headerText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    headerText:SetPoint("LEFT", 0, 0)
+    headerText:SetPoint("LEFT", 4, 0)
     headerText:SetJustifyH("LEFT")
-    headerText:SetWidth(336)
+    headerText:SetWidth(332)
+    headerText:SetTextColor(unpack(COLORS.gold))
 
     local ITEM_ROW_HEIGHT = 32
     local ITEM_ICON_SIZE = 24
@@ -119,6 +143,20 @@ local function RefreshContent()
     Layout()
 end
 
+local tabButtons = {}
+
+local function UpdateTabStyles()
+    for _, tab in ipairs(tabButtons) do
+        if tab.view == currentView then
+            tab.bg:SetColorTexture(unpack(COLORS.cardHeadBg))
+            tab.text:SetTextColor(unpack(COLORS.gold))
+        else
+            tab.bg:SetColorTexture(unpack(COLORS.windowBg))
+            tab.text:SetTextColor(unpack(COLORS.mutedTan))
+        end
+    end
+end
+
 local function CreateTab(parent, label, view, x)
     local tab = CreateFrame("Button", nil, parent)
     tab:SetSize(80, 20)
@@ -126,14 +164,19 @@ local function CreateTab(parent, label, view, x)
 
     local bg = tab:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetColorTexture(0.2, 0.2, 0.2, 1)
 
     local text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetPoint("CENTER")
     text:SetText(label)
 
+    tab.view = view
+    tab.bg = bg
+    tab.text = text
+    table.insert(tabButtons, tab)
+
     tab:SetScript("OnClick", function()
         currentView = view
+        UpdateTabStyles()
         RefreshContent()
     end)
 
@@ -153,10 +196,10 @@ local function CreatePanel()
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
+        edgeSize = 2,
     })
-    frame:SetBackdropColor(0, 0, 0, 1)
-    frame:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+    frame:SetBackdropColor(unpack(COLORS.windowBg))
+    frame:SetBackdropBorderColor(unpack(COLORS.windowBorder))
 
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", -4, -4)
@@ -167,9 +210,11 @@ local function CreatePanel()
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(Where2GoConstants.ADDON_NAME)
+    title:SetTextColor(unpack(COLORS.gold))
 
     CreateTab(frame, Where2GoLocale.L("MODE_DROP"), "DROP", 12)
     CreateTab(frame, Where2GoLocale.L("MODE_VOIDCORE"), "VOIDCORE", 96)
+    UpdateTabStyles()
 
     local browseButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     browseButton:SetSize(70, 20)

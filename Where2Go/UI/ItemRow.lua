@@ -21,6 +21,15 @@ Where2GoItemRow = {}
 function Where2GoItemRow.CreateWidgets(row, iconSize, leftOffset)
     leftOffset = leftOffset or 0
 
+    -- Hover highlight (mockup's ".w2g-row:hover" treatment) -- shown/hidden
+    -- alongside the tooltip in Populate's OnEnter/OnLeave below, so every
+    -- row using this shared widget set gets the same "row you're looking
+    -- at" feedback.
+    row.highlight = row:CreateTexture(nil, "BACKGROUND")
+    row.highlight:SetAllPoints()
+    row.highlight:SetColorTexture(0.102, 0.075, 0.035, 1)
+    row.highlight:Hide()
+
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(iconSize, iconSize)
     row.icon:SetPoint("LEFT", leftOffset, 0)
@@ -77,6 +86,7 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
 
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
+        self.highlight:Show()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetItemByID(itemId)
         if sourceLabel then
@@ -84,5 +94,8 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
         end
         GameTooltip:Show()
     end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row:SetScript("OnLeave", function(self)
+        self.highlight:Hide()
+        GameTooltip:Hide()
+    end)
 end
