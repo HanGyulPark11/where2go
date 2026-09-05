@@ -304,7 +304,11 @@ local function CreateBrowserPanel()
             rootDescription:CreateCheckbox(text,
                 function() return filters.sources[key] == true end,
                 function()
-                    filters.sources[key] = (filters.sources[key] == true) and nil or true
+                    if filters.sources[key] == true then
+                        filters.sources[key] = nil
+                    else
+                        filters.sources[key] = true
+                    end
                     UpdateSourceDropdownText()
                     RebuildFilteredResults()
                 end)
@@ -346,7 +350,11 @@ local function CreateBrowserPanel()
             rootDescription:CreateCheckbox(Where2GoLocale.SlotLabel(slot),
                 function() return filters.slots[slot] == true end,
                 function()
-                    filters.slots[slot] = (filters.slots[slot] == true) and nil or true
+                    if filters.slots[slot] == true then
+                        filters.slots[slot] = nil
+                    else
+                        filters.slots[slot] = true
+                    end
                     UpdateSlotDropdownText()
                     RebuildFilteredResults()
                 end)
@@ -438,7 +446,11 @@ local function CreateBrowserPanel()
             rootDescription:CreateCheckbox(spec.specName,
                 function() return filters.specIds[spec.specId] == true end,
                 function()
-                    filters.specIds[spec.specId] = (filters.specIds[spec.specId] == true) and nil or true
+                    if filters.specIds[spec.specId] == true then
+                        filters.specIds[spec.specId] = nil
+                    else
+                        filters.specIds[spec.specId] = true
+                    end
                     UpdateSpecDropdownText()
                     RebuildFilteredResults()
                 end)
