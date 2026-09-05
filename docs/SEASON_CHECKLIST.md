@@ -53,14 +53,21 @@ earlier ones are done.
 5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** As of Phase
    8b this is independent of step 4 — it drives Blizzard's Encounter
    Journal loot filter directly off the just-updated `Sources.lua`'s own
-   `instanceId`/`bossId` fields, not `VoidcacheIds.lua`. Log into any one
-   character (any class) and run `/where2go genspec` once — it now scans
-   every class and spec in the game in a single pass (not one pass per
-   class), merging the result into `Where2GoDB.specEligibilityExport`.
-   If leftover export data exists from a previous season, run
-   `/where2go genspec reset` first to clear it (the scan will otherwise
-   warn and refuse to run, to avoid silently merging two seasons' data
-   together).
+   `instanceId`/`bossId` fields, not `VoidcacheIds.lua`. First, run
+   `/where2go genspec reset` unconditionally, even if you don't think any
+   leftover export data exists — the staleness guard that would otherwise
+   catch this can't help you here: it compares
+   `Where2GoDB.specEligibilityExport.seasonVersion` against
+   `Where2GoConstants.SEASON_LABEL`, but `SEASON_LABEL` isn't bumped to
+   the new season until step 9, several steps after this one. At this
+   point in the checklist a leftover export from last season still has a
+   `seasonVersion` that matches the still-current `SEASON_LABEL`, so the
+   guard sees no staleness and won't warn — genspec would otherwise
+   silently merge into last season's stale `bySpec` data. Then log into
+   any one character (any class) and run `/where2go genspec` once — it
+   now scans every class and spec in the game in a single pass (not one
+   pass per class), merging the result into
+   `Where2GoDB.specEligibilityExport`.
 
    A mid-season edit to `Sources.lua`'s item pools (e.g. a hotfixed item
    addition) also requires re-running this step — a newly-added item has

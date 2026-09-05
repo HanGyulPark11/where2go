@@ -1,7 +1,8 @@
 -- Assembles the real ranked direct-drop content list: current-spec
 -- detection, item eligibility (IsEligibleForSpec below consults the
 -- committed Core/SpecEligibilityData.lua -- generated via
--- Core/SpecEligibilityScan.lua's maintainer-only tooltip-scan tool --
+-- Core/SpecEligibilityScan.lua's maintainer-only Encounter Journal
+-- loot-filter scan (a single pass covering every class/spec) --
 -- first when available, falling back to the live
 -- C_Item.GetItemSpecInfo/IsEquippableItem heuristic otherwise), item
 -- name lookup, and calls Where2GoRanking.RankContent. WoW-API-dependent;
@@ -75,8 +76,8 @@ end
 function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
         -- Prefer the committed, precomputed data (Core/SpecEligibilityData.lua,
-        -- generated via Core/SpecEligibilityScan.lua's tooltip-scan
-        -- technique and hand-merged in -- see
+        -- generated via Core/SpecEligibilityScan.lua's Encounter Journal
+        -- loot-filter scan and hand-merged in -- see
         -- docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md)
         -- when this spec has an entry: it's Blizzard's own
         -- server-computed loot table for the spec, not a heuristic, so

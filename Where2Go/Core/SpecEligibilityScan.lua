@@ -148,14 +148,27 @@ local function RunFullScan()
 
             for classIndex = 1, numClasses do
                 local _, _, classId = GetClassInfo(classIndex)
-                local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId)
-                for specIndex = 1, numSpecs do
-                    local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
-                    if specId then
-                        EJ_SetLootFilter(classId, specId)
-                        local filtered = CollectCurrentLootItemIds()
-                        local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, encounter.itemIds)
-                        if next(matched) ~= nil then
+                if classId then
+                    -- `or 0` and the specId nil-check below are defensive:
+                    -- neither API is expected to return nil for a real
+                    -- class/spec index on current retail (class IDs 1-13
+                    -- are contiguous), but if one ever did, skipping just
+                    -- that class/spec is safer than letting a `for` loop
+                    -- raise "'for' limit must be a number" and having the
+                    -- pcall in Start() abort the whole scan.
+                    local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId) or 0
+                    for specIndex = 1, numSpecs do
+                        local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
+                        if specId then
+                            EJ_SetLootFilter(classId, specId)
+                            local filtered = CollectCurrentLootItemIds()
+                            local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, encounter.itemIds)
+                            -- Every spec actually scanned gets a bySpec
+                            -- entry regardless of whether anything matched
+                            -- here, so a spec that now matches nothing
+                            -- ends up with an empty {} (per MergeBySpec's
+                            -- contract above) instead of silently keeping
+                            -- a prior pass's stale entry.
                             local existing = bySpec[specId] or {}
                             for itemId in pairs(matched) do
                                 existing[itemId] = true
@@ -166,7 +179,6 @@ local function RunFullScan()
                 end
             end
         end
-        NotifyProgress(source.name, nil, nil, nil)
     end
 
     EJ_SetLootFilter(0, 0)
