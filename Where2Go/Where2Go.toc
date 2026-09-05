@@ -20,7 +20,6 @@ Core\DirectDrop.lua
 Core\VoidcoreHistory.lua
 Core\VoidcoreDrop.lua
 Core\SpecEligibilityScan.lua
-Core\EJDiagnostic.lua
 Core\Compare.lua
 Core\Equipment.lua
 Core\Init.lua

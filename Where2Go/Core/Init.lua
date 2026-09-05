@@ -114,12 +114,6 @@ local function HandleGenspecProgress(specName, _current, _total, finishedReason)
         _lastGenspecSpecName = nil
         if finishedReason == "COMPLETE" then
             print("Where2Go: genspec scan complete -- log out to flush SavedVariables, then hand-merge Where2GoDB.specEligibilityExport into Core/SpecEligibilityData.lua.")
-        elseif finishedReason == "ABORTED_NAME_RESOLUTION" then
-            print("Where2Go: genspec scan aborted -- item cache was cold. Try again after items have loaded (e.g. open your bags first).")
-        elseif finishedReason == "ABORTED_COMBAT" then
-            print("Where2Go: genspec scan aborted -- entered combat.")
-        elseif finishedReason == "ABORTED_MANUAL_SPEC_CHANGE" then
-            print("Where2Go: genspec scan aborted -- loot specialization was changed manually mid-scan.")
         elseif finishedReason == "ABORTED_ERROR" then
             print("Where2Go: genspec scan aborted due to an error -- see the error log.")
         end
@@ -129,17 +123,6 @@ local function HandleGenspecProgress(specName, _current, _total, finishedReason)
         _lastGenspecSpecName = specName
         print(string.format("Where2Go: genspec scanning %s...", specName or "?"))
     end
-end
-
-local function DescribeCurrentClassSpecs()
-    local names = {}
-    for i = 1, GetNumSpecializations() do
-        local _, specName = GetSpecializationInfo(i)
-        if specName then
-            table.insert(names, specName)
-        end
-    end
-    return names
 end
 
 local function HandleGenspecCommand(args)
@@ -160,11 +143,7 @@ local function HandleGenspecCommand(args)
         return
     end
 
-    local _, className = UnitClass("player")
-    local specNames = DescribeCurrentClassSpecs()
-    print(string.format(
-        "Where2Go: about to scan %d spec(s) for %s (%s) -- make sure this is a throwaway/safe character, this will temporarily change your loot specialization.",
-        #specNames, className or "?", table.concat(specNames, ", ")))
+    print("Where2Go: scanning every class/spec in the game via the Encounter Journal -- this does not change your loot specialization and should finish quickly.")
 
     Where2GoSpecEligibilityScan.SetProgressCallback("genspec", HandleGenspecProgress)
     local ok, reason = Where2GoSpecEligibilityScan.Start()
@@ -180,10 +159,10 @@ local function HandleGenspecCommand(args)
         print("Where2Go: a genspec scan is already running.")
     elseif reason == "COMBAT" then
         print("Where2Go: cannot start a genspec scan while in combat.")
-    elseif reason == "NO_SPECS" then
-        print("Where2Go: this character has no specializations to scan.")
-    elseif reason == "NO_ITEMS" then
-        print("Where2Go: no Voidcache items configured to scan (check VoidcacheIds.lua).")
+    elseif reason == "EJ_LOAD_FAILED" then
+        print("Where2Go: genspec could not load the Blizzard_EncounterJournal addon -- try opening the in-game Dungeon Journal (default key: Shift+J) once, then run this again.")
+    elseif reason == "ERROR" then
+        print("Where2Go: genspec scan aborted due to an error -- see the error log.")
     end
 end
 
@@ -200,11 +179,9 @@ SlashCmdList["WHERE2GO"] = function(msg)
         Where2GoBrowserPanel.Toggle()
     elseif subcommand == "genspec" then
         HandleGenspecCommand(args)
-    elseif subcommand == "ejtest" then
-        Where2GoEJDiagnostic.TestBoss(tonumber(args[2]), tonumber(args[3]))
     elseif not subcommand or subcommand == "" then
         Where2Go_TogglePanel()
     else
-        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset], /where2go ejtest [bossId] [classId]")
+        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset]")
     end
 end
