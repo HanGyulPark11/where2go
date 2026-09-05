@@ -196,16 +196,19 @@ RefreshPreferredRows = function()
     end
 end
 
-local function UpdateSourceDropdownText()
+-- Shared by every multi-select dropdown's button-label text (Source,
+-- Stat, Spec): count how many keys/entries are truthy in a filters
+-- table, and format the "%d selected" label.
+local function CountSelected(t)
     local count = 0
-    for _ in pairs(filters.sources) do
+    for _ in pairs(t) do
         count = count + 1
     end
-    if count == 0 then
-        UIDropDownMenu_SetText(sourceDropdown, Where2GoLocale.L("SOURCE_DROPDOWN_ALL"))
-    else
-        UIDropDownMenu_SetText(sourceDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
-    end
+    return count
+end
+
+local function NSelectedText(count)
+    return string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count)
 end
 
 local function CreateBrowserPanel()
@@ -262,99 +265,85 @@ local function CreateBrowserPanel()
     voidcoreButton:SetScript("OnClick", function() SetMode("VOIDCORE") end)
 
     -- Merged multi-select "Source" dropdown (replaces the old separate
-    -- Dungeon/Boss toggle-button rows). Reuses UIDropDownMenuTemplate's
-    -- native checkbox-item support (isNotRadio + keepShownOnClick) --
-    -- the same dropdown mechanism this file already uses for the
-    -- single-select spec dropdown below, just configured for multi-select.
-    sourceDropdown = CreateFrame("Frame", "Where2GoBrowserSourceDropdown", frame, "UIDropDownMenuTemplate")
+    -- Dungeon/Boss toggle-button rows). Built on Blizzard's current
+    -- Menu system (CreateCheckbox) rather than the deprecated
+    -- UIDropDownMenuTemplate -- the legacy dropdown's click-time
+    -- checkmark state proved unreliable for multi-select checkboxes in
+    -- this client version (items couldn't be unchecked, and checking
+    -- one item visually cleared others). CreateCheckbox's isSelected/
+    -- setSelected callbacks read and write filters.sources directly,
+    -- and forcing MenuResponse.Refresh after every click regenerates
+    -- the whole menu (and the button's own label, via SetSelectionText)
+    -- from that live state, so displayed checkmarks can never drift
+    -- from filters.sources. See
+    -- docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md.
+    sourceDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSourceDropdown", frame, "WowStyle1FilterDropdownTemplate")
     sourceDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
-    UIDropDownMenu_SetWidth(sourceDropdown, 160)
-
-    UIDropDownMenu_Initialize(sourceDropdown, function(_self, level)
-        local function AddGroupHeader(text)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.isTitle, info.notCheckable = text, true, true
-            UIDropDownMenu_AddButton(info, level)
+    sourceDropdown:SetWidth(160)
+    sourceDropdown:SetDefaultText(Where2GoLocale.L("SOURCE_DROPDOWN_ALL"))
+    sourceDropdown:SetSelectionText(function()
+        local count = CountSelected(filters.sources)
+        if count == 0 then
+            return Where2GoLocale.L("SOURCE_DROPDOWN_ALL")
         end
+        return NSelectedText(count)
+    end)
+    sourceDropdown:SetupMenu(function(_owner, rootDescription)
         local function AddSourceOption(key, text)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = text
-            info.isNotRadio = true
-            info.keepShownOnClick = true
-            info.checked = filters.sources[key] == true
-            info.func = function()
-                filters.sources[key] = (filters.sources[key] == true) and nil or true
-                UpdateSourceDropdownText()
-                RebuildFilteredResults()
-                -- UIDropDownMenu's own click-time checkmark toggling is
-                -- unreliable across repeated clicks on the same open
-                -- menu (WoW-client-version-dependent) -- force a redraw
-                -- from the real source of truth (filters.sources) every
-                -- time instead of trusting the button's own internal
-                -- toggle state.
-                UIDropDownMenu_Refresh(sourceDropdown)
-            end
-            UIDropDownMenu_AddButton(info, level)
+            local checkbox = rootDescription:CreateCheckbox(text,
+                function() return filters.sources[key] == true end,
+                function()
+                    filters.sources[key] = (filters.sources[key] == true) and nil or true
+                    RebuildFilteredResults()
+                end)
+            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
 
-        AddGroupHeader(Where2GoLocale.L("SOURCE_GROUP_DUNGEONS"))
+        rootDescription:CreateTitle(Where2GoLocale.L("SOURCE_GROUP_DUNGEONS"))
         for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
             AddSourceOption("dungeon:" .. dungeon.instanceId, dungeon.name)
         end
         for _, raid in ipairs(Where2GoSources.RAIDS) do
-            AddGroupHeader(raid.name)
+            rootDescription:CreateTitle(raid.name)
             for _, encounter in ipairs(raid.encounters) do
                 AddSourceOption("boss:" .. encounter.bossId, encounter.name)
             end
         end
     end)
-    UpdateSourceDropdownText()
 
-    -- Slot filter dropdown (single-select, replaces the old multi-row
-    -- toggle-button grid).
-    slotDropdown = CreateFrame("Frame", "Where2GoBrowserSlotDropdown", frame, "UIDropDownMenuTemplate")
+    -- Slot filter dropdown (single-select "radio" group, replaces the
+    -- old multi-row toggle-button grid). Same Menu-system migration
+    -- rationale as the Source dropdown above.
+    slotDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSlotDropdown", frame, "WowStyle1FilterDropdownTemplate")
     slotDropdown:SetPoint("TOPLEFT", -4, -72)
-    UIDropDownMenu_SetWidth(slotDropdown, 130)
-
-    local function UpdateSlotDropdownText()
-        if filters.slot then
-            UIDropDownMenu_SetText(slotDropdown, Where2GoLocale.SlotLabel(filters.slot))
-        else
-            UIDropDownMenu_SetText(slotDropdown, Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
-        end
-    end
-
-    UIDropDownMenu_Initialize(slotDropdown, function(_self, level)
-        local allInfo = UIDropDownMenu_CreateInfo()
-        allInfo.text = Where2GoLocale.L("SLOT_DROPDOWN_ALL")
-        allInfo.checked = (filters.slot == nil)
-        allInfo.func = function()
-            filters.slot = nil
-            UpdateSlotDropdownText()
-            RebuildFilteredResults()
-        end
-        UIDropDownMenu_AddButton(allInfo, level)
-
-        for _, slot in ipairs(SLOT_ORDER) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = Where2GoLocale.SlotLabel(slot)
-            info.checked = (filters.slot == slot)
-            info.func = function()
-                filters.slot = slot
-                UpdateSlotDropdownText()
+    slotDropdown:SetWidth(130)
+    slotDropdown:SetDefaultText(Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
+    slotDropdown:SetSelectionText(function()
+        return filters.slot and Where2GoLocale.SlotLabel(filters.slot) or Where2GoLocale.L("SLOT_DROPDOWN_ALL")
+    end)
+    slotDropdown:SetupMenu(function(_owner, rootDescription)
+        rootDescription:CreateRadio(Where2GoLocale.L("SLOT_DROPDOWN_ALL"),
+            function() return filters.slot == nil end,
+            function()
+                filters.slot = nil
                 RebuildFilteredResults()
-            end
-            UIDropDownMenu_AddButton(info, level)
+            end)
+        for _, slot in ipairs(SLOT_ORDER) do
+            rootDescription:CreateRadio(Where2GoLocale.SlotLabel(slot),
+                function() return filters.slot == slot end,
+                function()
+                    filters.slot = slot
+                    RebuildFilteredResults()
+                end)
         end
     end)
-    UpdateSlotDropdownText()
 
     -- Stat filter dropdown (multi-select, AND semantics preserved -- an
     -- item must have ALL checked stats, see Core/ItemBrowser.lua's
     -- matchesFilters, unchanged by this task).
-    statDropdown = CreateFrame("Frame", "Where2GoBrowserStatDropdown", frame, "UIDropDownMenuTemplate")
+    statDropdown = CreateFrame("DropdownButton", "Where2GoBrowserStatDropdown", frame, "WowStyle1FilterDropdownTemplate")
     statDropdown:SetPoint("LEFT", slotDropdown, "RIGHT", 20, 0)
-    UIDropDownMenu_SetWidth(statDropdown, 130)
+    statDropdown:SetWidth(130)
 
     local function IsStatSelected(stat)
         for _, s in ipairs(filters.stats) do
@@ -365,41 +354,34 @@ local function CreateBrowserPanel()
         return false
     end
 
-    local function UpdateStatDropdownText()
+    statDropdown:SetDefaultText(Where2GoLocale.L("STAT_DROPDOWN_ALL"))
+    statDropdown:SetSelectionText(function()
         local count = #filters.stats
         if count == 0 then
-            UIDropDownMenu_SetText(statDropdown, Where2GoLocale.L("STAT_DROPDOWN_ALL"))
-        else
-            UIDropDownMenu_SetText(statDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
+            return Where2GoLocale.L("STAT_DROPDOWN_ALL")
         end
-    end
-
-    UIDropDownMenu_Initialize(statDropdown, function(_self, level)
+        return NSelectedText(count)
+    end)
+    statDropdown:SetupMenu(function(_owner, rootDescription)
         for _, stat in ipairs(STAT_ORDER) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = Where2GoLocale.StatLabel(stat)
-            info.isNotRadio = true
-            info.keepShownOnClick = true
-            info.checked = IsStatSelected(stat)
-            info.func = function()
-                if IsStatSelected(stat) then
-                    for i, s in ipairs(filters.stats) do
-                        if s == stat then
-                            table.remove(filters.stats, i)
-                            break
+            local checkbox = rootDescription:CreateCheckbox(Where2GoLocale.StatLabel(stat),
+                function() return IsStatSelected(stat) end,
+                function()
+                    if IsStatSelected(stat) then
+                        for i, s in ipairs(filters.stats) do
+                            if s == stat then
+                                table.remove(filters.stats, i)
+                                break
+                            end
                         end
+                    else
+                        table.insert(filters.stats, stat)
                     end
-                else
-                    table.insert(filters.stats, stat)
-                end
-                UpdateStatDropdownText()
-                RebuildFilteredResults()
-                UIDropDownMenu_Refresh(statDropdown)
-            end
-            UIDropDownMenu_AddButton(info, level)
+                    RebuildFilteredResults()
+                end)
+            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
     end)
-    UpdateStatDropdownText()
 
     -- Spec-eligible-only checkbox (defaults to checked), paired with the
     -- multi-select spec dropdown directly next to it (moved here from
@@ -420,39 +402,28 @@ local function CreateBrowserPanel()
     -- Multi-select spec dropdown: nothing checked means "any spec of my
     -- class" (GetItemEligible's own fallback above), not "my current
     -- active spec only".
-    specDropdown = CreateFrame("Frame", "Where2GoBrowserSpecDropdown", frame, "UIDropDownMenuTemplate")
+    specDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSpecDropdown", frame, "WowStyle1FilterDropdownTemplate")
     specDropdown:SetPoint("LEFT", eligibleLabel, "RIGHT", 12, -2)
-    UIDropDownMenu_SetWidth(specDropdown, 130)
-
-    local function UpdateSpecDropdownText()
-        local count = 0
-        for _ in pairs(filters.specIds) do
-            count = count + 1
-        end
+    specDropdown:SetWidth(130)
+    specDropdown:SetDefaultText(Where2GoLocale.L("SPEC_DROPDOWN_ALL"))
+    specDropdown:SetSelectionText(function()
+        local count = CountSelected(filters.specIds)
         if count == 0 then
-            UIDropDownMenu_SetText(specDropdown, Where2GoLocale.L("SPEC_DROPDOWN_ALL"))
-        else
-            UIDropDownMenu_SetText(specDropdown, string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count))
+            return Where2GoLocale.L("SPEC_DROPDOWN_ALL")
         end
-    end
-
-    UIDropDownMenu_Initialize(specDropdown, function(_self, level)
+        return NSelectedText(count)
+    end)
+    specDropdown:SetupMenu(function(_owner, rootDescription)
         for _, spec in ipairs(GetAvailableSpecs()) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = spec.specName
-            info.isNotRadio = true
-            info.keepShownOnClick = true
-            info.checked = filters.specIds[spec.specId] == true
-            info.func = function()
-                filters.specIds[spec.specId] = (filters.specIds[spec.specId] == true) and nil or true
-                UpdateSpecDropdownText()
-                RebuildFilteredResults()
-                UIDropDownMenu_Refresh(specDropdown)
-            end
-            UIDropDownMenu_AddButton(info, level)
+            local checkbox = rootDescription:CreateCheckbox(spec.specName,
+                function() return filters.specIds[spec.specId] == true end,
+                function()
+                    filters.specIds[spec.specId] = (filters.specIds[spec.specId] == true) and nil or true
+                    RebuildFilteredResults()
+                end)
+            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
     end)
-    UpdateSpecDropdownText()
 
     -- Search box
     local searchLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
