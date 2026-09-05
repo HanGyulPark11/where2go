@@ -1,7 +1,7 @@
 local browserFrame
 local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
 local itemPool
-local filters = { sources = {}, slot = nil, stats = {}, specEligibleOnly = true, searchText = nil, specIds = {} }
+local filters = { sources = {}, slots = {}, stats = {}, specEligibleOnly = true, searchText = nil, specIds = {} }
 local filteredResults = {}
 local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
 local specDropdown
@@ -271,14 +271,20 @@ local function CreateBrowserPanel()
     -- checkmark state proved unreliable for multi-select checkboxes in
     -- this client version (items couldn't be unchecked, and checking
     -- one item visually cleared others). CreateCheckbox's isSelected/
-    -- setSelected callbacks read and write filters.sources directly,
-    -- and forcing MenuResponse.Refresh after every click regenerates
-    -- the whole menu from that live state, so displayed checkmarks can
-    -- never drift from filters.sources. The button's own label is set
-    -- directly on dropdown.Text (SetDefaultText/SetSelectionText looked
-    -- documented but are nil on a plain CreateFrame-built DropdownButton
-    -- in this client -- confirmed live, not just theorized) and updated
-    -- manually on every state change, same as the pre-migration pattern.
+    -- setSelected callbacks read and write filters.sources directly.
+    -- IMPORTANT: do NOT call :SetResponder() again on the returned
+    -- description -- MenuTemplates.CreateCheckbox already wires the
+    -- setSelected function passed in as the ONLY responder via
+    -- SetResponder(onSelect) and separately forces SetResponse(
+    -- MenuResponse.Refresh); calling SetResponder a second time (an
+    -- earlier version of this file did) REPLACES that real handler with
+    -- whatever the second call passes, silently turning every click into
+    -- a no-op -- confirmed live (this was the "선택이 안 돼" bug).
+    -- The button's own label is set directly on dropdown.Text
+    -- (SetDefaultText/SetSelectionText looked documented but are nil on
+    -- a plain CreateFrame-built DropdownButton in this client -- also
+    -- confirmed live) and updated manually on every state change, same
+    -- as the pre-migration pattern.
     -- See docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md.
     sourceDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSourceDropdown", frame, "WowStyle1FilterDropdownTemplate")
     sourceDropdown:SetPoint("LEFT", voidcoreButton, "RIGHT", 20, -2)
@@ -295,14 +301,13 @@ local function CreateBrowserPanel()
 
     sourceDropdown:SetupMenu(function(_owner, rootDescription)
         local function AddSourceOption(key, text)
-            local checkbox = rootDescription:CreateCheckbox(text,
+            rootDescription:CreateCheckbox(text,
                 function() return filters.sources[key] == true end,
                 function()
                     filters.sources[key] = (filters.sources[key] == true) and nil or true
                     UpdateSourceDropdownText()
                     RebuildFilteredResults()
                 end)
-            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
 
         rootDescription:CreateTitle(Where2GoLocale.L("SOURCE_GROUP_DUNGEONS"))
@@ -318,30 +323,30 @@ local function CreateBrowserPanel()
     end)
     UpdateSourceDropdownText()
 
-    -- Slot filter dropdown (single-select "radio" group, replaces the
-    -- old multi-row toggle-button grid). Same Menu-system migration
-    -- rationale as the Source dropdown above.
+    -- Slot filter dropdown (multi-select, OR semantics -- an item needs
+    -- ANY checked slot, empty = no filter -- same shape as Source/Stat/
+    -- Spec below, matching the user's explicit request that Slot behave
+    -- like the other multi-select filters rather than a single-pick
+    -- radio group).
     slotDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSlotDropdown", frame, "WowStyle1FilterDropdownTemplate")
     slotDropdown:SetPoint("TOPLEFT", -4, -72)
     slotDropdown:SetWidth(130)
 
     local function UpdateSlotDropdownText()
-        slotDropdown.Text:SetText(filters.slot and Where2GoLocale.SlotLabel(filters.slot) or Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
+        local count = CountSelected(filters.slots)
+        if count == 0 then
+            slotDropdown.Text:SetText(Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
+        else
+            slotDropdown.Text:SetText(NSelectedText(count))
+        end
     end
 
     slotDropdown:SetupMenu(function(_owner, rootDescription)
-        rootDescription:CreateRadio(Where2GoLocale.L("SLOT_DROPDOWN_ALL"),
-            function() return filters.slot == nil end,
-            function()
-                filters.slot = nil
-                UpdateSlotDropdownText()
-                RebuildFilteredResults()
-            end)
         for _, slot in ipairs(SLOT_ORDER) do
-            rootDescription:CreateRadio(Where2GoLocale.SlotLabel(slot),
-                function() return filters.slot == slot end,
+            rootDescription:CreateCheckbox(Where2GoLocale.SlotLabel(slot),
+                function() return filters.slots[slot] == true end,
                 function()
-                    filters.slot = slot
+                    filters.slots[slot] = (filters.slots[slot] == true) and nil or true
                     UpdateSlotDropdownText()
                     RebuildFilteredResults()
                 end)
@@ -376,7 +381,7 @@ local function CreateBrowserPanel()
 
     statDropdown:SetupMenu(function(_owner, rootDescription)
         for _, stat in ipairs(STAT_ORDER) do
-            local checkbox = rootDescription:CreateCheckbox(Where2GoLocale.StatLabel(stat),
+            rootDescription:CreateCheckbox(Where2GoLocale.StatLabel(stat),
                 function() return IsStatSelected(stat) end,
                 function()
                     if IsStatSelected(stat) then
@@ -392,7 +397,6 @@ local function CreateBrowserPanel()
                     UpdateStatDropdownText()
                     RebuildFilteredResults()
                 end)
-            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
     end)
     UpdateStatDropdownText()
@@ -431,14 +435,13 @@ local function CreateBrowserPanel()
 
     specDropdown:SetupMenu(function(_owner, rootDescription)
         for _, spec in ipairs(GetAvailableSpecs()) do
-            local checkbox = rootDescription:CreateCheckbox(spec.specName,
+            rootDescription:CreateCheckbox(spec.specName,
                 function() return filters.specIds[spec.specId] == true end,
                 function()
                     filters.specIds[spec.specId] = (filters.specIds[spec.specId] == true) and nil or true
                     UpdateSpecDropdownText()
                     RebuildFilteredResults()
                 end)
-            checkbox:SetResponder(function() return MenuResponse.Refresh end)
         end
     end)
     UpdateSpecDropdownText()

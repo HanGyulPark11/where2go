@@ -48,7 +48,7 @@ local function matchesFilters(entry, filters, context)
     if filters.sources and next(filters.sources) ~= nil and not filters.sources[entry.sourceKey] then
         return false
     end
-    if filters.slot and slot ~= filters.slot then
+    if filters.slots and next(filters.slots) ~= nil and not filters.slots[slot] then
         return false
     end
     if filters.stats and #filters.stats > 0 then

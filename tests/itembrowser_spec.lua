@@ -51,10 +51,22 @@ do
     assert(#results == 4, "an empty sources table should not filter anything out")
 end
 
--- FilterItems: slot filter
+-- FilterItems: slot filter (multi-select, OR semantics -- empty means no filter)
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { slot = "TRINKET" }, fixtureContext())
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { slots = { TRINKET = true } }, fixtureContext())
     assert(#results == 2, "slot filter should return both trinkets (101, 200)")
+end
+
+-- FilterItems: multiple selected slots union together (OR, not AND)
+do
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { slots = { TRINKET = true, HEAD = true } }, fixtureContext())
+    assert(#results == 3, "selecting two slots together should return the union of both (100 HEAD, 101+200 TRINKET)")
+end
+
+-- FilterItems: empty slots table means no filter
+do
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { slots = {} }, fixtureContext())
+    assert(#results == 4, "an empty slots table should not filter anything out")
 end
 
 -- FilterItems: specEligibleOnly filter
@@ -96,7 +108,7 @@ end
 
 -- FilterItems: combined filters (AND logic)
 do
-    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:1"] = true }, slot = "TRINKET" }, fixtureContext())
+    local results = Where2GoItemBrowser.FilterItems(fixturePool(), { sources = { ["dungeon:1"] = true }, slots = { TRINKET = true } }, fixtureContext())
     assert(#results == 2, "combined source+slot filter should AND together")
 end
 
