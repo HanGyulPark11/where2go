@@ -200,9 +200,11 @@ SlashCmdList["WHERE2GO"] = function(msg)
         Where2GoBrowserPanel.Toggle()
     elseif subcommand == "genspec" then
         HandleGenspecCommand(args)
+    elseif subcommand == "ejtest" then
+        Where2GoEJDiagnostic.TestBoss(tonumber(args[2]), tonumber(args[3]))
     elseif not subcommand or subcommand == "" then
         Where2Go_TogglePanel()
     else
-        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset]")
+        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset], /where2go ejtest [bossId] [classId]")
     end
 end
