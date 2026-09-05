@@ -13,7 +13,10 @@
 -- class-agnostic (works from a single character for every class/spec in
 -- the game, not just the scanning character's own class) and returns
 -- real numeric item IDs directly, with no tooltip-name-resolution/
--- cold-item-cache step at all. See
+-- cold-item-cache step at all. It also scans a whole dungeon/raid's
+-- combined loot per class/spec (EJ_SelectInstance only, no
+-- EJ_SelectEncounter) rather than per boss, since BY_SPEC has no
+-- per-boss grouping to preserve -- see CollectSourceItemIds below. See
 -- docs/superpowers/specs/2026-09-05-phase8b-ej-loot-filter-genspec-design.md.
 -- Core/VoidcacheIds.lua is intentionally NOT used here anymore (kept in
 -- the codebase for a separate, unstarted backlog feature -- see that
@@ -104,8 +107,8 @@ end
 -- Every dungeon/raid entry Where2GoSources.lua tracks, in one flat list,
 -- each still carrying its own `encounters` array -- the scan loop below
 -- iterates this directly rather than DUNGEONS/RAIDS separately, since
--- both need identical treatment (select instance, then per-encounter
--- work).
+-- both need identical treatment (select the instance, then scan its
+-- combined loot once per class/spec).
 local function AllTrackedSources()
     local all = {}
     for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
@@ -129,12 +132,34 @@ local function CollectCurrentLootItemIds()
     return ids
 end
 
--- The actual scan: for every tracked encounter, for every class/spec in
--- the game, ask the Encounter Journal which of that encounter's known
--- items this spec can receive. Runs synchronously (no C_Timer chunking)
--- since every call here is local client data with no server round-trip,
--- unlike the old tooltip-read/SetLootSpecialization flow. Wrapped in
--- pcall by Start() below, so any error here still leaves _running reset
+-- Every item ID any of `source`'s encounters tracks, flattened into one
+-- array. BY_SPEC has no per-boss grouping at all (just
+-- `[specId][itemId] = true`), so the scan never needs to know which
+-- specific boss an item came from -- only whether the whole
+-- dungeon/raid's loot, filtered to one spec, includes it. Selecting the
+-- instance without selecting any encounter (EJ_SelectInstance alone, no
+-- EJ_SelectEncounter) mirrors what the real Encounter Journal UI does
+-- when a player clicks a dungeon/raid's title without picking a boss --
+-- confirmed by reading Blizzard's own EncounterJournal_DisplayInstance,
+-- which sets `encounterID = nil` and calls EJ_GetNumLoot/GetLootInfoByIndex
+-- directly, aggregating every encounter's loot in one combined list.
+local function CollectSourceItemIds(source)
+    local ids = {}
+    for _, encounter in ipairs(source.encounters) do
+        for _, itemId in ipairs(encounter.itemIds) do
+            table.insert(ids, itemId)
+        end
+    end
+    return ids
+end
+
+-- The actual scan: for every tracked dungeon/raid, for every class/spec
+-- in the game, ask the Encounter Journal which of that instance's known
+-- items (across all its bosses at once, see CollectSourceItemIds) this
+-- spec can receive. Runs synchronously (no C_Timer chunking) since every
+-- call here is local client data with no server round-trip, unlike the
+-- old tooltip-read/SetLootSpecialization flow. Wrapped in pcall by
+-- Start() below, so any error here still leaves _running reset
 -- correctly.
 local function RunFullScan()
     local bySpec = {}
@@ -142,39 +167,37 @@ local function RunFullScan()
     local sex = UnitSex("player")
 
     for _, source in ipairs(AllTrackedSources()) do
-        for _, encounter in ipairs(source.encounters) do
-            EJ_SelectInstance(source.instanceId)
-            EJ_SelectEncounter(encounter.bossId)
+        EJ_SelectInstance(source.instanceId)
+        local sourceItemIds = CollectSourceItemIds(source)
 
-            for classIndex = 1, numClasses do
-                local _, _, classId = GetClassInfo(classIndex)
-                if classId then
-                    -- `or 0` and the specId nil-check below are defensive:
-                    -- neither API is expected to return nil for a real
-                    -- class/spec index on current retail (class IDs 1-13
-                    -- are contiguous), but if one ever did, skipping just
-                    -- that class/spec is safer than letting a `for` loop
-                    -- raise "'for' limit must be a number" and having the
-                    -- pcall in Start() abort the whole scan.
-                    local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId) or 0
-                    for specIndex = 1, numSpecs do
-                        local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
-                        if specId then
-                            EJ_SetLootFilter(classId, specId)
-                            local filtered = CollectCurrentLootItemIds()
-                            local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, encounter.itemIds)
-                            -- Every spec actually scanned gets a bySpec
-                            -- entry regardless of whether anything matched
-                            -- here, so a spec that now matches nothing
-                            -- ends up with an empty {} (per MergeBySpec's
-                            -- contract above) instead of silently keeping
-                            -- a prior pass's stale entry.
-                            local existing = bySpec[specId] or {}
-                            for itemId in pairs(matched) do
-                                existing[itemId] = true
-                            end
-                            bySpec[specId] = existing
+        for classIndex = 1, numClasses do
+            local _, _, classId = GetClassInfo(classIndex)
+            if classId then
+                -- `or 0` and the specId nil-check below are defensive:
+                -- neither API is expected to return nil for a real
+                -- class/spec index on current retail (class IDs 1-13
+                -- are contiguous), but if one ever did, skipping just
+                -- that class/spec is safer than letting a `for` loop
+                -- raise "'for' limit must be a number" and having the
+                -- pcall in Start() abort the whole scan.
+                local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId) or 0
+                for specIndex = 1, numSpecs do
+                    local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
+                    if specId then
+                        EJ_SetLootFilter(classId, specId)
+                        local filtered = CollectCurrentLootItemIds()
+                        local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, sourceItemIds)
+                        -- Every spec actually scanned gets a bySpec entry
+                        -- regardless of whether anything matched here, so
+                        -- a spec that now matches nothing ends up with an
+                        -- empty {} (per MergeBySpec's contract above)
+                        -- instead of silently keeping a prior pass's
+                        -- stale entry.
+                        local existing = bySpec[specId] or {}
+                        for itemId in pairs(matched) do
+                            existing[itemId] = true
                         end
+                        bySpec[specId] = existing
                     end
                 end
             end
@@ -197,7 +220,7 @@ function Where2GoSpecEligibilityScan.Start()
     end
 
     EnsureEncounterJournalLoaded()
-    if not EJ_SelectInstance or not EJ_SelectEncounter or not C_EncounterJournal then
+    if not EJ_SelectInstance or not C_EncounterJournal then
         return false, "EJ_LOAD_FAILED"
     end
 
