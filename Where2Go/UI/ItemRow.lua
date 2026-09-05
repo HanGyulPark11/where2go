@@ -54,12 +54,23 @@ end
 -- visible row text per this project's "no boss-name clutter" item-row
 -- goal, but still available on hover (see
 -- docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md).
+-- `bonusId` (optional, from Where2GoRaidRanks.GetRaidIlvl/GetMythicPlusIlvl)
+-- is the item's real upgrade-track bonus ID for this source -- when known,
+-- the tooltip is built from a synthetic tracked link (SetHyperlink) instead
+-- of the item's cached base-form data (SetItemByID), which otherwise shows
+-- whatever level happened to be cached (e.g. an untracked base ilvl like
+-- 219 for gear that's actually dropping on a much higher upgrade track) --
+-- see docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md and
+-- the wow-item-level-bonus-id-system vault page's "SetHyperlink vs
+-- SetItemByID" note. Falls back to SetItemByID when bonusId is nil
+-- (Staged/Preferred rows, which don't carry a fixed source/track).
+--
 -- Cold-item-cache items show a placeholder icon/name; only
 -- UI/BrowserPanel.lua's Results rows self-heal automatically (its
 -- GET_ITEM_INFO_RECEIVED watcher triggers a rebuild) -- UI/Panel.lua's
 -- cards populate once per card build and refresh only when the panel is
 -- next reopened, matching this file's pre-existing behavior.
-function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
+function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId)
     local name, _, quality = C_Item.GetItemInfo(itemId)
     local icon = C_Item.GetItemIconByID(itemId)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -88,7 +99,11 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel)
     row:SetScript("OnEnter", function(self)
         self.highlight:Show()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetItemByID(itemId)
+        if bonusId then
+            GameTooltip:SetHyperlink(string.format("item:%d:0:0:0:0:0:0:0:0:0:0:0:1:%d", itemId, bonusId))
+        else
+            GameTooltip:SetItemByID(itemId)
+        end
         if sourceLabel then
             GameTooltip:AddLine(sourceLabel, 0.6, 0.6, 0.6)
         end

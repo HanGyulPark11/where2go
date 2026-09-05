@@ -66,7 +66,7 @@ local function CreateCard(parent, result)
         Where2GoItemRow.CreateWidgets(row, ITEM_ICON_SIZE, 0)
         row.name:SetWidth(ITEM_ROW_WIDTH - ITEM_ICON_SIZE - 4)
         row.summary:SetWidth(ITEM_ROW_WIDTH - ITEM_ICON_SIZE - 4)
-        Where2GoItemRow.Populate(row, itemId, result.ilvl)
+        Where2GoItemRow.Populate(row, itemId, result.ilvl, nil, result.bonusId)
         table.insert(itemRows, row)
         rowY = rowY - ITEM_ROW_HEIGHT
     end

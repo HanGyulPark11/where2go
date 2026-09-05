@@ -71,13 +71,15 @@ end
 -- Individual items don't carry a fixed ilvl in Sources.lua -- gear scales
 -- with the player's current Mythic+/raid track, the same way
 -- Core/DirectDrop.lua's BuildContentList already computes it per content.
+-- Returns (ilvl, bonusId) -- bonusId lets ItemRow.Populate build a real
+-- tracked tooltip link instead of showing the item's cached base ilvl.
 local function GetEntryIlvl(entry)
     if entry.kind == "dungeon" then
-        local ilvl = Where2GoRaidRanks.GetMythicPlusIlvl()
-        return ilvl
+        local ilvl, _trackKey, _rank, bonusId = Where2GoRaidRanks.GetMythicPlusIlvl()
+        return ilvl, bonusId
     end
-    local ilvl = Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
-    return ilvl
+    local ilvl, _trackKey, _rank, bonusId = Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
+    return ilvl, bonusId
 end
 
 local function GetEntrySourceLabel(entry)
@@ -120,7 +122,8 @@ local function RefreshVisibleRows()
         if entry and row then
             row:Show()
             row.entry = entry
-            Where2GoItemRow.Populate(row, entry.itemId, GetEntryIlvl(entry), GetEntrySourceLabel(entry))
+            local ilvl, bonusId = GetEntryIlvl(entry)
+            Where2GoItemRow.Populate(row, entry.itemId, ilvl, GetEntrySourceLabel(entry), bonusId)
             row.checkbox:SetChecked(stagedSelection[entry.itemId] == true)
         elseif row then
             row:Hide()

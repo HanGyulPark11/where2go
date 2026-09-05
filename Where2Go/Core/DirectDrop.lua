@@ -28,7 +28,7 @@ end
 function Where2GoDirectDrop.BuildContentList()
     local content = {}
 
-    local mplusIlvl, mplusTrackKey, mplusRank = Where2GoRaidRanks.GetMythicPlusIlvl()
+    local mplusIlvl, mplusTrackKey, mplusRank, mplusBonusId = Where2GoRaidRanks.GetMythicPlusIlvl()
     for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
         table.insert(content, {
             id = "dungeon:" .. dungeon.instanceId,
@@ -39,12 +39,13 @@ function Where2GoDirectDrop.BuildContentList()
             ilvl = mplusIlvl,
             trackKey = mplusTrackKey,
             trackRank = mplusRank,
+            bonusId = mplusBonusId,
         })
     end
 
     for _, raid in ipairs(Where2GoSources.RAIDS) do
         for _, encounter in ipairs(raid.encounters) do
-            local ilvl, trackKey, rank = Where2GoRaidRanks.GetRaidIlvl(encounter.bossId)
+            local ilvl, trackKey, rank, bonusId = Where2GoRaidRanks.GetRaidIlvl(encounter.bossId)
             table.insert(content, {
                 id = "boss:" .. encounter.bossId,
                 name = encounter.name,
@@ -54,6 +55,7 @@ function Where2GoDirectDrop.BuildContentList()
                 ilvl = ilvl,
                 trackKey = trackKey,
                 trackRank = rank,
+                bonusId = bonusId,
             })
         end
     end
