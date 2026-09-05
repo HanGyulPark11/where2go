@@ -3,7 +3,7 @@ local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
 local itemPool
 local filters = { sources = {}, slots = {}, stats = {}, specEligibleOnly = true, searchText = nil, specIds = {} }
 local filteredResults = {}
-local stagedSelection = {}  -- itemId -> true, cleared on "clear selection" or after commit
+local stagedSelection = {}  -- itemId -> bonusId (real track bonus ID, for the tooltip -- see UI/ItemRow.lua), cleared on "clear selection" or after commit
 local specDropdown
 local sourceDropdown
 local slotDropdown
@@ -123,8 +123,9 @@ local function RefreshVisibleRows()
             row:Show()
             row.entry = entry
             local ilvl, bonusId = GetEntryIlvl(entry)
+            row.bonusId = bonusId
             Where2GoItemRow.Populate(row, entry.itemId, ilvl, GetEntrySourceLabel(entry), bonusId)
-            row.checkbox:SetChecked(stagedSelection[entry.itemId] == true)
+            row.checkbox:SetChecked(stagedSelection[entry.itemId] ~= nil)
         elseif row then
             row:Hide()
             row.entry = nil
@@ -163,7 +164,7 @@ RefreshStagedRows = function()
         if itemId and row then
             row:Show()
             row.itemId = itemId
-            Where2GoItemRow.Populate(row, itemId, nil)
+            Where2GoItemRow.Populate(row, itemId, nil, nil, stagedSelection[itemId])
         elseif row then
             row:Hide()
             row.itemId = nil
@@ -191,7 +192,7 @@ RefreshPreferredRows = function()
         if itemId and row then
             row:Show()
             row.itemId = itemId
-            Where2GoItemRow.Populate(row, itemId, nil)
+            Where2GoItemRow.Populate(row, itemId, nil, nil, Where2GoCharDB.preferredItemSources[currentMode][itemId])
         elseif row then
             row:Hide()
             row.itemId = nil
@@ -569,7 +570,7 @@ local function CreateBrowserPanel()
             local r = self:GetParent()
             if r.entry then
                 if self:GetChecked() then
-                    stagedSelection[r.entry.itemId] = true
+                    stagedSelection[r.entry.itemId] = r.bonusId
                 else
                     stagedSelection[r.entry.itemId] = nil
                 end
@@ -648,6 +649,7 @@ local function CreateBrowserPanel()
     for i = 1, PREFERRED_VISIBLE_ROWS do
         local row = CreateSideListRow(preferredFrame, PREFERRED_WIDTH, function(itemId)
             Where2GoCharDB.preferredItems[currentMode][itemId] = nil
+            Where2GoCharDB.preferredItemSources[currentMode][itemId] = nil
             RefreshPreferredRows()
         end)
         row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
@@ -660,8 +662,9 @@ local function CreateBrowserPanel()
     addSelectedButton:SetPoint("TOPLEFT", stagedFrame, "BOTTOMLEFT", 0, -12)
     addSelectedButton:SetText(Where2GoLocale.L("ADD_SELECTED"))
     addSelectedButton:SetScript("OnClick", function()
-        for itemId in pairs(stagedSelection) do
+        for itemId, bonusId in pairs(stagedSelection) do
             Where2GoCharDB.preferredItems[currentMode][itemId] = true
+            Where2GoCharDB.preferredItemSources[currentMode][itemId] = bonusId
         end
         stagedSelection = {}
         RebuildFilteredResults()
@@ -698,6 +701,7 @@ StaticPopupDialogs["WHERE2GO_CLEAR_PREFERRED"] = {
     button2 = Where2GoLocale.L("CANCEL_BUTTON"),
     OnAccept = function()
         Where2GoCharDB.preferredItems[currentMode] = {}
+        Where2GoCharDB.preferredItemSources[currentMode] = {}
         RebuildFilteredResults()
         RefreshPreferredRows()
     end,

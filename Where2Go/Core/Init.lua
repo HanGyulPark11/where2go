@@ -11,6 +11,9 @@ eventFrame:SetScript("OnEvent", function(self, _event, loadedAddonName)
     Where2GoCharDB.preferredItems = Where2GoCharDB.preferredItems or {}
     Where2GoCharDB.preferredItems.DROP = Where2GoCharDB.preferredItems.DROP or {}
     Where2GoCharDB.preferredItems.VOIDCORE = Where2GoCharDB.preferredItems.VOIDCORE or {}
+    Where2GoCharDB.preferredItemSources = Where2GoCharDB.preferredItemSources or {}
+    Where2GoCharDB.preferredItemSources.DROP = Where2GoCharDB.preferredItemSources.DROP or {}
+    Where2GoCharDB.preferredItemSources.VOIDCORE = Where2GoCharDB.preferredItemSources.VOIDCORE or {}
     Where2GoCharDB.voidcoreObtainedItems = Where2GoCharDB.voidcoreObtainedItems or {}
 
     self:UnregisterEvent("ADDON_LOADED")
@@ -49,6 +52,7 @@ local function HandlePrefCommand(args)
             print(string.format("Where2Go: added item %d to %s preferred items.", itemId, purpose))
         else
             Where2GoCharDB.preferredItems[purpose][itemId] = nil
+            Where2GoCharDB.preferredItemSources[purpose][itemId] = nil
             print(string.format("Where2Go: removed item %d from %s preferred items.", itemId, purpose))
         end
     elseif action == "list" then

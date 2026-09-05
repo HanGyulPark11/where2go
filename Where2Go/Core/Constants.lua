@@ -65,6 +65,18 @@ function Where2GoConstants.BuildDefaultCharDB()
             DROP = {},
             VOIDCORE = {},
         },
+        -- itemId -> real upgrade-track bonus ID captured when the item was
+        -- added to preferredItems, purely so Staged/Preferred rows can show
+        -- an accurate GameTooltip (see UI/ItemRow.lua) instead of the
+        -- item's cached base-form level. Optional metadata: an itemId
+        -- present in preferredItems with no entry here just falls back to
+        -- SetItemByID, same as before this field existed (e.g. items added
+        -- via the /where2go pref add debug command, which has no source
+        -- context to record).
+        preferredItemSources = {
+            DROP = {},
+            VOIDCORE = {},
+        },
         voidcoreObtainedItems = {},
     }
 end

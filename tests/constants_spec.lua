@@ -36,6 +36,11 @@ assert(type(charDB.preferredItems.DROP) == "table", "preferredItems.DROP should 
 assert(type(charDB.preferredItems.VOIDCORE) == "table", "preferredItems.VOIDCORE should default to a table")
 assert(next(charDB.preferredItems.DROP) == nil, "preferredItems.DROP should default to empty")
 assert(next(charDB.preferredItems.VOIDCORE) == nil, "preferredItems.VOIDCORE should default to empty")
+assert(type(charDB.preferredItemSources) == "table", "preferredItemSources should default to a table")
+assert(type(charDB.preferredItemSources.DROP) == "table", "preferredItemSources.DROP should default to a table")
+assert(type(charDB.preferredItemSources.VOIDCORE) == "table", "preferredItemSources.VOIDCORE should default to a table")
+assert(next(charDB.preferredItemSources.DROP) == nil, "preferredItemSources.DROP should default to empty")
+assert(next(charDB.preferredItemSources.VOIDCORE) == nil, "preferredItemSources.VOIDCORE should default to empty")
 assert(type(charDB.voidcoreObtainedItems) == "table", "voidcoreObtainedItems should default to a table")
 assert(next(charDB.voidcoreObtainedItems) == nil, "voidcoreObtainedItems should default to empty")
 
@@ -45,11 +50,14 @@ assert(next(charDB.voidcoreObtainedItems) == nil, "voidcoreObtainedItems should 
 local secondCharDB = Where2GoConstants.BuildDefaultCharDB()
 charDB.preferredItems.DROP[12345] = true
 charDB.preferredItems.VOIDCORE[54321] = true
+charDB.preferredItemSources.DROP[12345] = 12841
 charDB.voidcoreObtainedItems[99999] = true
 assert(next(secondCharDB.preferredItems.DROP) == nil,
     "BuildDefaultCharDB must return an independent DROP table on each call")
 assert(next(secondCharDB.preferredItems.VOIDCORE) == nil,
     "BuildDefaultCharDB must return an independent VOIDCORE table on each call")
+assert(next(secondCharDB.preferredItemSources.DROP) == nil,
+    "BuildDefaultCharDB must return an independent preferredItemSources.DROP table on each call")
 assert(next(secondCharDB.voidcoreObtainedItems) == nil,
     "BuildDefaultCharDB must return an independent voidcoreObtainedItems table on each call")
 
