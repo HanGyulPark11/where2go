@@ -96,6 +96,16 @@ Where2GoLocale.STAT_ABBREV = {
     koKR = { CRIT_RATING = "치명타", HASTE_RATING = "가속", MASTERY_RATING = "특화", VERSATILITY = "유연성" },
 }
 
+-- Gear upgrade-track names (Core/Tracks.lua's UPGRADE_TRACKS keys), shown
+-- next to a recommendation card's ilvl (e.g. "(Hero 3/6)"). Korean terms
+-- confirmed against the pre-restart branch's own previously-shipped
+-- Constants.lua (C.UPGRADE_TRACKS[*].label), consistent with general
+-- Korean WoW community usage for these track names.
+Where2GoLocale.TRACK_LABELS = {
+    enUS = { VETERAN = "Veteran", CHAMPION = "Champion", HERO = "Hero", MYTH = "Myth" },
+    koKR = { VETERAN = "숙련", CHAMPION = "챔피언", HERO = "영웅", MYTH = "신화" },
+}
+
 -- Guarded: GetLocale is a WoW API global, absent in the plain-Lua test
 -- harness. Falls back to enUS there rather than erroring at load time.
 local activeLocale = (type(GetLocale) == "function" and GetLocale() == "koKR") and "koKR" or "enUS"
@@ -116,4 +126,8 @@ end
 
 function Where2GoLocale.StatAbbrev(stat)
     return Where2GoLocale.STAT_ABBREV[activeLocale][stat] or Where2GoLocale.STAT_ABBREV.enUS[stat] or stat
+end
+
+function Where2GoLocale.TrackLabel(trackKey)
+    return Where2GoLocale.TRACK_LABELS[activeLocale][trackKey] or Where2GoLocale.TRACK_LABELS.enUS[trackKey] or trackKey
 end

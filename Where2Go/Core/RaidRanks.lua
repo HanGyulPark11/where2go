@@ -35,22 +35,27 @@ Where2GoRaidRanks.MYTH_FINAL_BOSS_IDS = { [2883] = true, [2895] = true }
 Where2GoRaidRanks.MYTH_FINAL_ILVL = 344
 Where2GoRaidRanks.MYTH_FINAL_RANK = 9
 
--- Returns (ilvl, trackLabel, rank) for a Venomous-Abyss-style raid boss at
+-- Returns (ilvl, trackKey, rank) for a Venomous-Abyss-style raid boss at
 -- Mythic difficulty. The final two bosses (see MYTH_FINAL_BOSS_IDS above)
 -- are special-cased to the Myth 9/6 ilvl 344 track above the normal 1-4
--- rank cap. Unlisted boss IDs default to rank 1.
+-- rank cap. Unlisted boss IDs default to rank 1. trackKey is the raw
+-- Where2GoTracks.UPGRADE_TRACKS key (e.g. "MYTH") rather than a display
+-- string -- callers localize via Where2GoLocale.TrackLabel(trackKey) at
+-- the UI layer, keeping this Core module locale-agnostic.
 function Where2GoRaidRanks.GetRaidIlvl(bossId)
     if Where2GoRaidRanks.MYTH_FINAL_BOSS_IDS[bossId] then
-        return Where2GoRaidRanks.MYTH_FINAL_ILVL, Where2GoTracks.UPGRADE_TRACKS.MYTH.label, Where2GoRaidRanks.MYTH_FINAL_RANK
+        return Where2GoRaidRanks.MYTH_FINAL_ILVL, "MYTH", Where2GoRaidRanks.MYTH_FINAL_RANK
     end
     local rank = Where2GoRaidRanks.RAID_BOSS_RANK[bossId] or 1
     local track = Where2GoTracks.UPGRADE_TRACKS.MYTH
-    return track.ilvls[rank], track.label, rank
+    return track.ilvls[rank], "MYTH", rank
 end
 
--- Returns (ilvl, trackLabel, rank) for the fixed Mythic+ key+10 assumption.
+-- Returns (ilvl, trackKey, rank) for the fixed Mythic+ key+10 assumption.
+-- See GetRaidIlvl's comment above re: trackKey vs. a display label.
 function Where2GoRaidRanks.GetMythicPlusIlvl()
-    local track = Where2GoTracks.UPGRADE_TRACKS[Where2GoRaidRanks.MYTHIC_PLUS_TRACK_KEY]
+    local trackKey = Where2GoRaidRanks.MYTHIC_PLUS_TRACK_KEY
+    local track = Where2GoTracks.UPGRADE_TRACKS[trackKey]
     local rank = Where2GoRaidRanks.MYTHIC_PLUS_TRACK_RANK
-    return track.ilvls[rank], track.label, rank
+    return track.ilvls[rank], trackKey, rank
 end
