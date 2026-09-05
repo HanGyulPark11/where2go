@@ -28,53 +28,60 @@ earlier ones are done.
    the generator's own header does not carry forward every note from the
    committed file automatically.
 
-4. **Refresh `Where2Go/Core/VoidcacheIds.lua`.** No API endpoint exists
-   for this data (see
+4. **Refresh `Where2Go/Core/VoidcacheIds.lua` (optional — currently
+   unused by any shipped feature).** No API endpoint exists for this
+   data (see
    `docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md`'s
-   Data Sourcing section) — it's a manual per-entry Wowhead lookup. For
-   every dungeon in the just-updated `Sources.lua` `DUNGEONS` list and
-   every raid boss in `RAIDS`, search Wowhead for
-   `"Nebulous Voidcache: <exact dungeon or boss name>"` and note the
-   item ID from the result page's URL (`wowhead.com/item=<id>`). Update
+   Data Sourcing section) — it's a manual per-entry Wowhead lookup. As of
+   Phase 8b, this file is no longer a dependency of step 5's
+   spec-eligibility regeneration (that now drives the Encounter Journal
+   directly off `Sources.lua`'s own `instanceId`/`bossId` fields). It's
+   kept only for a separate, not-yet-built feature (backfilling a
+   player's own pre-addon-install Voidcore obtained-item history — see
+   `docs/superpowers/specs/2026-09-05-phase8b-ej-loot-filter-genspec-design.md`'s
+   "Why VoidcacheIds.lua survives" section). **Skip this step during a
+   normal season changeover** unless that feature has since been built —
+   in which case refresh it the same way as before: for every dungeon in
+   the just-updated `Sources.lua` `DUNGEONS` list and every raid boss in
+   `RAIDS`, search Wowhead for `"Nebulous Voidcache: <exact dungeon or
+   boss name>"` and note the item ID from the result page's URL
+   (`wowhead.com/item=<id>`). Update
    `Where2GoVoidcacheIds.DUNGEONS`/`RAID_BOSSES` with the new
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
-   - A mid-season edit to this file or to `Sources.lua`'s item pools
-     requires re-running step 5's `/where2go genspec` regeneration and
-     hand-merge for every affected class — a newly-added item has no
-     `BY_SPEC[specId]` entry yet, and absence means "ineligible", not
-     "unknown", until it's regenerated. Do **not** bump `SEASON_LABEL`
-     to try to force this: that field no longer triggers anything for
-     spec-eligibility data, and bumping it mid-season will trip
-     `Where2GoDB.specEligibilityExport`'s season-staleness guard and
-     block further `/where2go genspec` runs until a `genspec reset`
-     throws away any in-progress accumulated export data.
 
-5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** This depends
-   on step 4's refreshed `VoidcacheIds.lua`, so do it right after. Run
-   `/where2go genspec reset` once to clear any leftover data from the
-   previous season. Then, for every class in the game, log into (or
-   create a throwaway) character of that class and run
-   `/where2go genspec` — it scans all of that character's own class
-   specs in one ~40-second pass and merges the result into
-   `Where2GoDB.specEligibilityExport`, which survives across
-   logins/characters until you reset it again. This is the slowest step
-   in this checklist (one full pass per class); it's fine to spread it
-   across as many sessions as needed since the data accumulates.
+5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** As of Phase
+   8b this is independent of step 4 — it drives Blizzard's Encounter
+   Journal loot filter directly off the just-updated `Sources.lua`'s own
+   `instanceId`/`bossId` fields, not `VoidcacheIds.lua`. Log into any one
+   character (any class) and run `/where2go genspec` once — it now scans
+   every class and spec in the game in a single pass (not one pass per
+   class), merging the result into `Where2GoDB.specEligibilityExport`.
+   If leftover export data exists from a previous season, run
+   `/where2go genspec reset` first to clear it (the scan will otherwise
+   warn and refuse to run, to avoid silently merging two seasons' data
+   together).
 
-   Once every class is scanned, log out to flush SavedVariables, open
+   A mid-season edit to `Sources.lua`'s item pools (e.g. a hotfixed item
+   addition) also requires re-running this step — a newly-added item has
+   no `BY_SPEC[specId]` entry yet, and absence means "ineligible", not
+   "unknown", until regenerated. Do **not** bump `SEASON_LABEL` to try to
+   force this: that field doesn't trigger anything here either, and
+   bumping it mid-season will trip `Where2GoDB.specEligibilityExport`'s
+   season-staleness guard and block `/where2go genspec` until a
+   `genspec reset` throws away any in-progress accumulated data.
+
+   Once scanned, log out to flush SavedVariables, open
    `WTF/Account/<acct>/SavedVariables/Where2Go.lua`, and find the
    `Where2GoDB.specEligibilityExport.bySpec` table. **Eyeball it before
-   copying anything**: every spec you scanned should have a plausible
-   non-empty item count (roughly similar across specs of the same
-   class) — a spec showing zero items usually means the item cache was
-   cold during that scan and needs re-running. Once it looks right,
-   hand-merge `bySpec`'s entries into
+   copying anything**: every spec should have a plausible non-empty item
+   count (roughly similar across specs of the same class) — an
+   unexpectedly-empty spec is worth re-running before trusting it. Once
+   it looks right, hand-merge `bySpec`'s entries into
    `Where2Go/Core/SpecEligibilityData.lua`'s `BY_SPEC` table (matching
    this project's existing "human reviews the diff, never
-   auto-overwrite" convention for committed data files), and update the
-   file's own comment/history if useful context changed. See
-   `docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md`
+   auto-overwrite" convention for committed data files). See
+   `docs/superpowers/specs/2026-09-05-phase8b-ej-loot-filter-genspec-design.md`
    for the full design rationale.
 
 6. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
@@ -126,4 +133,6 @@ earlier ones are done.
     ```
     Confirm all specs pass before committing the updated `Sources.lua`,
     `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`,
-    `Where2Go/Core/VoidcacheIds.lua`, `Where2Go/Core/SpecEligibilityData.lua`, and `sources_spec.lua` together.
+    `Where2Go/Core/SpecEligibilityData.lua`, `sources_spec.lua`, and (only
+    if step 4 was actually performed this season) `Where2Go/Core/VoidcacheIds.lua`
+    together.
