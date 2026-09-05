@@ -1,57 +1,48 @@
--- Scans the "Nebulous Voidcache" tooltip for each of the current
--- character's class's specializations. Historically (Phase 7) this ran
--- automatically for every player and cached its result per-character;
--- as of Phase 8 it is a maintainer-only tool triggered by
--- `/where2go genspec`, merging its result into the account-wide
--- Where2GoDB.specEligibilityExport table for manual hand-merging into
--- the committed Core/SpecEligibilityData.lua (consumed by
--- Core/DirectDrop.lua's IsEligibleForSpec). See
--- docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md
--- (original scan design) and
--- docs/superpowers/specs/2026-09-04-phase8-precomputed-spec-data-design.md
--- (export/generation workflow).
+-- Generates Core/SpecEligibilityData.lua's BY_SPEC precomputed data: for
+-- every class/spec in the game, which of Where2GoSources.lua's tracked
+-- dungeon/raid items that spec can actually receive as loot.
+-- Maintainer-only, triggered by `/where2go genspec`, merging its result
+-- into the account-wide Where2GoDB.specEligibilityExport table for
+-- manual hand-merging into the committed Core/SpecEligibilityData.lua
+-- (consumed by Core/DirectDrop.lua's IsEligibleForSpec).
 --
--- ParseTooltipLines, MergeBySpec, and CheckExportSeasonStale below are
+-- As of Phase 8b this drives Blizzard's own Encounter Journal loot
+-- filter (EJ_SetLootFilter(classId, specId) + C_EncounterJournal.GetLootInfoByIndex)
+-- instead of Phase 7/8's original Nebulous-Voidcache-tooltip +
+-- SetLootSpecialization technique -- the Encounter Journal filter is
+-- class-agnostic (works from a single character for every class/spec in
+-- the game, not just the scanning character's own class) and returns
+-- real numeric item IDs directly, with no tooltip-name-resolution/
+-- cold-item-cache step at all. See
+-- docs/superpowers/specs/2026-09-05-phase8b-ej-loot-filter-genspec-design.md.
+-- Core/VoidcacheIds.lua is intentionally NOT used here anymore (kept in
+-- the codebase for a separate, unstarted backlog feature -- see that
+-- design doc's "Why VoidcacheIds.lua survives" section).
+--
+-- FilterKnownItemIds, MergeBySpec, and CheckExportSeasonStale below are
 -- pure (no WoW API) and unit-tested in tests/specEligibilityScan_spec.lua.
--- The scan state machine that calls them is WoW-API-dependent like
+-- The scan loop that calls them is WoW-API-dependent like
 -- Core/VoidcoreDrop.lua/VoidcoreHistory.lua -- not unit-tested, verified
 -- live instead.
 
 Where2GoSpecEligibilityScan = {}
 
--- Item-name lines in a Nebulous Voidcache tooltip start at this index
--- (1-based) and are each prefixed "- ". Fewer lines than this means the
--- tooltip hasn't finished loading yet.
-local MIN_LINES = 7
-
-local function StripColorCodes(text)
-    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
-end
-
--- Pure function: parses tooltip line data (shaped like
--- C_TooltipInfo.GetItemByID(...).lines, an array of { leftText = "..." })
--- into a { [itemName] = true } set. Returns nil if there are fewer than
--- MIN_LINES lines (tooltip not fully loaded yet).
-function Where2GoSpecEligibilityScan.ParseTooltipLines(lines)
-    if not lines or #lines < MIN_LINES then
-        return nil
-    end
-    local items = {}
-    for i, lineData in ipairs(lines) do
-        if i >= MIN_LINES then
-            local text = lineData.leftText
-            if text then
-                local clean = StripColorCodes(text)
-                if clean:sub(1, 2) == "- " then
-                    local itemName = clean:sub(3):match("^(.-)%s*$")
-                    if itemName and itemName ~= "" then
-                        items[itemName] = true
-                    end
-                end
-            end
+-- Pure: given the set of item IDs a loot filter currently returns
+-- (`filteredIds`, `{[itemId]=true,...}`) and the list of item IDs
+-- Where2GoSources.lua already tracks for one encounter (`knownItemIds`,
+-- a plain array), returns only the intersection as a set. This is the
+-- mechanism that keeps non-gear Encounter Journal loot (mounts, pets,
+-- toys, quest items, crafting reagents) out of BY_SPEC entirely: an
+-- item ID never appears in the result unless it was already in
+-- `knownItemIds`, regardless of what else `filteredIds` contains.
+function Where2GoSpecEligibilityScan.FilterKnownItemIds(filteredIds, knownItemIds)
+    local matched = {}
+    for _, itemId in ipairs(knownItemIds) do
+        if filteredIds[itemId] then
+            matched[itemId] = true
         end
     end
-    return items
+    return matched
 end
 
 -- Pure: merges a scan pass's per-spec results into the existing export
@@ -78,12 +69,7 @@ function Where2GoSpecEligibilityScan.CheckExportSeasonStale(export, currentSeaso
     return export ~= nil and export.seasonVersion ~= nil and export.seasonVersion ~= currentSeasonLabel
 end
 
-local RETRY_DELAY = 0.35
-local STEP_DELAY = 0.5
-local SPEC_CHANGE_DELAY = 1.2
-local MAX_RETRIES = 5
-
-local _state = nil
+local _running = false
 local _progressCallbacks = {}
 
 -- Registry keyed by an arbitrary caller-chosen name (e.g. "panel",
@@ -104,216 +90,87 @@ local function NotifyProgress(specName, current, total, finishedReason)
 end
 
 function Where2GoSpecEligibilityScan.IsRunning()
-    return _state ~= nil and _state.running == true
+    return _running
 end
 
-local function CollectVoidcacheItemList()
-    local items = {}
-    for _, itemId in pairs(Where2GoVoidcacheIds.DUNGEONS) do
-        table.insert(items, itemId)
+local function EnsureEncounterJournalLoaded()
+    if C_AddOns and C_AddOns.LoadAddOn then
+        C_AddOns.LoadAddOn("Blizzard_EncounterJournal")
+    elseif LoadAddOn then
+        LoadAddOn("Blizzard_EncounterJournal")
     end
-    for _, itemId in pairs(Where2GoVoidcacheIds.RAID_BOSSES) do
-        table.insert(items, itemId)
-    end
-    return items
 end
 
--- Every item ID Sources.lua tracks -- the pool a scanned item name needs
--- to resolve against to recover its numeric item ID (tooltips only give
--- names). Requires the item cache to be warm; an item whose name isn't
--- cached yet at scan time is silently skipped for this scan. Unlike
--- Core/DirectDrop.lua's own cold-cache limitation -- which is
--- recomputed on every render and so self-heals naturally as the item
--- cache warms up during normal play -- this scan's result is merged
--- into Where2GoDB.specEligibilityExport (persistent SavedVariables) and
--- eventually hand-merged into the committed Core/SpecEligibilityData.lua,
--- so a cold-cache failure here does NOT self-heal the same way. The
--- actual mitigation is FinalizeScan's empty-result guard below, which
--- refuses to persist a scan whose name resolution came back empty
--- rather than silently writing bad (all-ineligible) data -- plus the
--- manual eyeball-check step in the Phase 8 design doc's export workflow.
-local function CollectAllPoolItemIds()
-    local ids = {}
+-- Every dungeon/raid entry Where2GoSources.lua tracks, in one flat list,
+-- each still carrying its own `encounters` array -- the scan loop below
+-- iterates this directly rather than DUNGEONS/RAIDS separately, since
+-- both need identical treatment (select instance, then per-encounter
+-- work).
+local function AllTrackedSources()
+    local all = {}
     for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
-        for _, encounter in ipairs(dungeon.encounters) do
-            for _, itemId in ipairs(encounter.itemIds) do
-                ids[itemId] = true
-            end
-        end
+        table.insert(all, dungeon)
     end
     for _, raid in ipairs(Where2GoSources.RAIDS) do
-        for _, encounter in ipairs(raid.encounters) do
-            for _, itemId in ipairs(encounter.itemIds) do
-                ids[itemId] = true
-            end
+        table.insert(all, raid)
+    end
+    return all
+end
+
+local function CollectCurrentLootItemIds()
+    local ids = {}
+    local numLoot = EJ_GetNumLoot() or 0
+    for i = 1, numLoot do
+        local info = C_EncounterJournal.GetLootInfoByIndex(i)
+        if info and info.itemID then
+            ids[info.itemID] = true
         end
     end
     return ids
 end
 
-local function BuildNameToItemId()
-    local nameToItemId = {}
-    for itemId in pairs(CollectAllPoolItemIds()) do
-        local name = C_Item.GetItemInfo(itemId)
-        if name and name ~= "" then
-            nameToItemId[name] = itemId
-        end
-    end
-    return nameToItemId
-end
-
-local _combatFrame
-if CreateFrame then
-    _combatFrame = CreateFrame("Frame")
-end
-
-local function AbortScan(reason)
-    if not _state then
-        return
-    end
-    _state.running = false
-    if _combatFrame then
-        _combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
-        _combatFrame:UnregisterEvent("PLAYER_LOOT_SPEC_UPDATED")
-    end
-    if _state.originalLootSpec ~= nil then
-        SetLootSpecialization(_state.originalLootSpec)
-    end
-    NotifyProgress(nil, nil, nil, reason)
-    _state = nil
-end
-
-local function FinalizeScan()
-    if not _state then
-        return
-    end
-
-    -- Built here rather than at Start() time: by the time the full scan
-    -- (all specs/items, ~40 seconds) has finished, the
-    -- RequestLoadItemDataByID calls issued in Start() have had plenty of
-    -- time to resolve, so this name cache is built against a warm item
-    -- cache instead of the cold one that's present the instant Start()
-    -- is called.
-    local nameToItemId = BuildNameToItemId()
-
+-- The actual scan: for every tracked encounter, for every class/spec in
+-- the game, ask the Encounter Journal which of that encounter's known
+-- items this spec can receive. Runs synchronously (no C_Timer chunking)
+-- since every call here is local client data with no server round-trip,
+-- unlike the old tooltip-read/SetLootSpecialization flow. Wrapped in
+-- pcall by Start() below, so any error here still leaves _running reset
+-- correctly.
+local function RunFullScan()
     local bySpec = {}
-    local coldCacheFailure = false
-    for _, specEntry in ipairs(_state.specs) do
-        local nameSet = _state.results[specEntry.specId] or {}
-        local itemSet = {}
-        for name in pairs(nameSet) do
-            local itemId = nameToItemId[name]
-            if itemId then
-                itemSet[itemId] = true
+    local numClasses = GetNumClasses()
+    local sex = UnitSex("player")
+
+    for _, source in ipairs(AllTrackedSources()) do
+        for _, encounter in ipairs(source.encounters) do
+            EJ_SelectInstance(source.instanceId)
+            EJ_SelectEncounter(encounter.bossId)
+
+            for classIndex = 1, numClasses do
+                local _, _, classId = GetClassInfo(classIndex)
+                local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId)
+                for specIndex = 1, numSpecs do
+                    local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
+                    if specId then
+                        EJ_SetLootFilter(classId, specId)
+                        local filtered = CollectCurrentLootItemIds()
+                        local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, encounter.itemIds)
+                        if next(matched) ~= nil then
+                            local existing = bySpec[specId] or {}
+                            for itemId in pairs(matched) do
+                                existing[itemId] = true
+                            end
+                            bySpec[specId] = existing
+                        end
+                    end
+                end
             end
         end
-        -- Cold-cache failure signature: real tooltip data came back
-        -- (parsed item names were collected) but none of those names
-        -- resolved to a known item ID, meaning the item cache was cold
-        -- during BuildNameToItemId. Persisting this would permanently
-        -- mark this spec ineligible for everything with no recovery
-        -- path (see CollectAllPoolItemIds's comment above).
-        if next(nameSet) ~= nil and next(itemSet) == nil then
-            coldCacheFailure = true
-        end
-        bySpec[specEntry.specId] = itemSet
+        NotifyProgress(source.name, nil, nil, nil)
     end
 
-    if not coldCacheFailure then
-        local existingBySpec = Where2GoDB.specEligibilityExport and Where2GoDB.specEligibilityExport.bySpec
-        Where2GoDB.specEligibilityExport = {
-            seasonVersion = Where2GoConstants.SEASON_LABEL,
-            bySpec = Where2GoSpecEligibilityScan.MergeBySpec(existingBySpec, bySpec),
-        }
-    end
-    -- else: leave Where2GoDB.specEligibilityExport untouched -- this
-    -- pass's result is discarded rather than merging in bad
-    -- (all-ineligible) data; re-running /where2go genspec retries.
-
-    if _combatFrame then
-        _combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
-        _combatFrame:UnregisterEvent("PLAYER_LOOT_SPEC_UPDATED")
-    end
-    SetLootSpecialization(_state.originalLootSpec or 0)
-    NotifyProgress(nil, nil, nil, coldCacheFailure and "ABORTED_NAME_RESOLUTION" or "COMPLETE")
-    _state = nil
-end
-
-local ScanStep
-ScanStep = function()
-    if not _state or not _state.running then
-        return
-    end
-
-    local ok, err = pcall(function()
-        if _state.specIdx > #_state.specs then
-            FinalizeScan()
-            return
-        end
-
-        local specEntry = _state.specs[_state.specIdx]
-        local voidcacheItemId = _state.items[_state.itemIdx]
-
-        -- Switch loot spec once at the start of each spec's pass (first
-        -- item, no retries yet), then wait for it to take effect.
-        -- expectingSpecChange tells the PLAYER_LOOT_SPEC_UPDATED handler
-        -- below that this particular change came from the scan itself, not
-        -- the player manually changing loot spec mid-scan (which would
-        -- otherwise silently attribute the rest of this pass's tooltip
-        -- reads to the wrong spec).
-        if _state.itemIdx == 1 and _state.retries == 0 and not _state.specSwitchDone then
-            _state.expectingSpecChange = true
-            SetLootSpecialization(specEntry.specId)
-            _state.specSwitchDone = true
-            C_Timer.After(SPEC_CHANGE_DELAY, ScanStep)
-            return
-        end
-        _state.expectingSpecChange = false
-
-        local tooltipData = C_TooltipInfo.GetItemByID(voidcacheItemId)
-        local lines = tooltipData and tooltipData.lines
-        local parsed = Where2GoSpecEligibilityScan.ParseTooltipLines(lines)
-
-        if not parsed then
-            _state.retries = _state.retries + 1
-            if _state.retries <= MAX_RETRIES then
-                C_Timer.After(RETRY_DELAY, ScanStep)
-                return
-            end
-            parsed = {}
-        end
-
-        local specNames = _state.results[specEntry.specId] or {}
-        for name in pairs(parsed) do
-            specNames[name] = true
-        end
-        _state.results[specEntry.specId] = specNames
-
-        _state.retries = 0
-        _state.itemIdx = _state.itemIdx + 1
-        if _state.itemIdx > #_state.items then
-            _state.itemIdx = 1
-            _state.specIdx = _state.specIdx + 1
-            _state.specSwitchDone = false
-        end
-
-        local completedSteps = (_state.specIdx - 1) * #_state.items + (_state.itemIdx == 1 and 0 or _state.itemIdx - 1)
-        NotifyProgress(specEntry.specName, completedSteps, #_state.specs * #_state.items, nil)
-
-        C_Timer.After(STEP_DELAY, ScanStep)
-    end)
-
-    if not ok then
-        -- Surface the actual error via WoW's global error handler (the
-        -- standard addon idiom -- routes to whatever error-display
-        -- addon/console the player has, same as an unhandled Lua error
-        -- would) so a live failure here is diagnosable instead of
-        -- silently retrying on every subsequent panel open. This only
-        -- runs from inside C_Timer.After callbacks, a WoW-only API, so
-        -- it never executes under the plain-Lua test harness.
-        geterrorhandler()(err)
-        AbortScan("ABORTED_ERROR")
-    end
+    EJ_SetLootFilter(0, 0)
+    return bySpec
 end
 
 function Where2GoSpecEligibilityScan.Start()
@@ -327,61 +184,31 @@ function Where2GoSpecEligibilityScan.Start()
         return false, "STALE_SEASON"
     end
 
-    local numSpecs = GetNumSpecializations()
-    local specs = {}
-    for i = 1, numSpecs do
-        local specId, specName = GetSpecializationInfo(i)
-        if specId then
-            table.insert(specs, { specId = specId, specName = specName })
-        end
-    end
-    if #specs == 0 then
-        return false, "NO_SPECS"
+    EnsureEncounterJournalLoaded()
+    if not EJ_SelectInstance or not EJ_SelectEncounter or not C_EncounterJournal then
+        return false, "EJ_LOAD_FAILED"
     end
 
-    local items = CollectVoidcacheItemList()
-    if #items == 0 then
-        return false, "NO_ITEMS"
+    _running = true
+    local ok, result = pcall(RunFullScan)
+    _running = false
+
+    if not ok then
+        -- Surface the actual error via WoW's global error handler (the
+        -- standard addon idiom -- routes to whatever error-display
+        -- addon/console the player has, same as an unhandled Lua error
+        -- would), rather than swallowing it silently.
+        geterrorhandler()(result)
+        NotifyProgress(nil, nil, nil, "ABORTED_ERROR")
+        return false, "ERROR"
     end
 
-    for itemId in pairs(CollectAllPoolItemIds()) do
-        C_Item.RequestLoadItemDataByID(itemId)
-    end
-
-    _state = {
-        running = true,
-        specs = specs,
-        items = items,
-        specIdx = 1,
-        itemIdx = 1,
-        retries = 0,
-        specSwitchDone = false,
-        expectingSpecChange = false,
-        results = {},
-        originalLootSpec = GetLootSpecialization(),
+    Where2GoDB.specEligibilityExport = {
+        seasonVersion = Where2GoConstants.SEASON_LABEL,
+        bySpec = Where2GoSpecEligibilityScan.MergeBySpec(
+            Where2GoDB.specEligibilityExport and Where2GoDB.specEligibilityExport.bySpec,
+            result),
     }
-
-    if _combatFrame then
-        _combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-        _combatFrame:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
-    end
-
-    NotifyProgress(specs[1].specName, 0, #specs * #items, nil)
-    C_Timer.After(0, ScanStep)
+    NotifyProgress(nil, nil, nil, "COMPLETE")
     return true
-end
-
-if _combatFrame then
-    _combatFrame:SetScript("OnEvent", function(_self, event)
-        if not _state or not _state.running then
-            return
-        end
-        if event == "PLAYER_REGEN_DISABLED" then
-            AbortScan("ABORTED_COMBAT")
-        elseif event == "PLAYER_LOOT_SPEC_UPDATED" then
-            if not _state.expectingSpecChange then
-                AbortScan("ABORTED_MANUAL_SPEC_CHANGE")
-            end
-        end
-    end)
 end
