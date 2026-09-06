@@ -657,6 +657,19 @@ local function CreateBrowserPanel()
         preferredRows[i] = row
     end
 
+    local selectAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    selectAllButton:SetSize(140, 22)
+    selectAllButton:SetPoint("TOPLEFT", resultsFrame, "BOTTOMLEFT", 0, -12)
+    selectAllButton:SetText(Where2GoLocale.L("SELECT_ALL_FILTERED"))
+    selectAllButton:SetScript("OnClick", function()
+        for _, entry in ipairs(filteredResults) do
+            local _, bonusId = GetEntryIlvl(entry)
+            stagedSelection[entry.itemId] = bonusId
+        end
+        RefreshStagedRows()
+        RefreshVisibleRows()
+    end)
+
     local addSelectedButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     addSelectedButton:SetSize(140, 22)
     addSelectedButton:SetPoint("TOPLEFT", stagedFrame, "BOTTOMLEFT", 0, -12)
