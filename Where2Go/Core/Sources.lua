@@ -18,7 +18,7 @@ Where2GoSources.DUNGEONS = {
         encounters = {
             { bossId = 2878, name = "Rav'i", itemIds = { 273796, 273795, 273785, 273775, 273777, 273780, 273793 } },
             { bossId = 2879, name = "The Writhing Coil", itemIds = { 273781, 273794, 273786, 273774, 273787, 273782, 273783, 273779 } },
-            { bossId = 2880, name = "Zul'jan", itemIds = { 273792, 273797, 273773, 273791, 273789, 273776, 273778, 273784, 270900, 275070, 279211, 276804 } },
+            { bossId = 2880, name = "Zul'jan", itemIds = { 273792, 273797, 273773, 273791, 273789, 273776, 273778, 273784, 270900, 275070, 279211 } },
         },
     },
     {
@@ -26,7 +26,7 @@ Where2GoSources.DUNGEONS = {
         name = "Den of Nalorakk",
         encounters = {
             { bossId = 2776, name = "The Hoardmonger", itemIds = { 250248, 251148, 251147, 251146, 251145, 251144, 251143 } },
-            { bossId = 2777, name = "Sentinel of Winter", itemIds = { 251154, 251153, 251152, 251155, 251151, 251150, 251149, 250244, 271681 } },
+            { bossId = 2777, name = "Sentinel of Winter", itemIds = { 251154, 251153, 251152, 251155, 251151, 251150, 251149, 250244 } },
             { bossId = 2778, name = "Nalorakk", itemIds = { 256737, 251160, 250229, 251159, 251158, 251156, 251173, 251214, 251173, 264332 } },
         },
     },
@@ -34,7 +34,7 @@ Where2GoSources.DUNGEONS = {
         instanceId = 1304,
         name = "Murder Row",
         encounters = {
-            { bossId = 2679, name = "Kystia Manaheart", itemIds = { 250243, 251127, 251124, 251125, 251126, 251123, 271680 } },
+            { bossId = 2679, name = "Kystia Manaheart", itemIds = { 250243, 251127, 251124, 251125, 251126, 251123 } },
             { bossId = 2680, name = "Zaen Bladesorrow", itemIds = { 250215, 251129, 251132, 251130, 251131, 251133, 251128 } },
             { bossId = 2681, name = "Xathuux the Annihilator", itemIds = { 250228, 251136, 251137, 251135, 251134 } },
             { bossId = 2682, name = "Lithiel Cinderfury", itemIds = { 250255, 251142, 251139, 251140, 251141, 251138, 263238, 256640, 258487, 258518, 256746, 258045 } },
@@ -47,7 +47,7 @@ Where2GoSources.DUNGEONS = {
             { bossId = 2769, name = "Lightblossom Trinity", itemIds = { 251185, 251183, 251184, 251182, 251180, 251181, 250254 } },
             { bossId = 2770, name = "Ikuzz the Light Hunter", itemIds = { 251190, 251189, 251187, 251186, 251188, 250238 } },
             { bossId = 2771, name = "Lightwarden Ruia", itemIds = { 250214, 251194, 251191, 251193, 251192, 251165 } },
-            { bossId = 2772, name = "Ziekket", itemIds = { 251199, 251198, 251200, 251197, 251196, 251195, 250259, 256652, 256642, 253451, 268728 } },
+            { bossId = 2772, name = "Ziekket", itemIds = { 251199, 251198, 251200, 251197, 251196, 251195, 250259, 256652, 256642, 253451 } },
         },
     },
     {
@@ -66,7 +66,7 @@ Where2GoSources.DUNGEONS = {
             { bossId = 2165, name = "The Golden Serpent", itemIds = { 159137, 159234, 159413, 159304, 159617, 159369, 159412, 159313 } },
             { bossId = 2171, name = "Mchimba the Embalmer", itemIds = { 159618, 159459, 159667, 160213, 159312, 159642, 159409 } },
             { bossId = 2170, name = "The Council of Tribes", itemIds = { 160216, 159300, 159136, 159643, 159288, 159243, 159371, 159418 } },
-            { bossId = 2172, name = "Dazar, The First King", itemIds = { 159921, 158344, 159236, 159422, 159423, 159645, 158355, 159303, 159368, 159301, 159644, 239047, 239045, 239048, 239046, 239049, 239050, 239051, 278245, 239045, 239047, 239050, 239051, 239046, 239048, 239049, 273649 } },
+            { bossId = 2172, name = "Dazar, The First King", itemIds = { 159645, 159301, 159644, 239047, 239045, 239048, 239046, 239049, 239050, 239051, 278245, 239045, 239047, 239050, 239051, 239046, 239048, 239049, 273649 } },
         },
     },
     {
@@ -75,7 +75,7 @@ Where2GoSources.DUNGEONS = {
         encounters = {
             { bossId = 2488, name = "Melidrussa Chillworn", itemIds = { 193759, 193758, 193761, 193757, 193728 } },
             { bossId = 2485, name = "Kokia Blazehoof", itemIds = { 193762, 193765, 193767, 193763, 193764, 193766 } },
-            { bossId = 2503, name = "Kyrakka and Erkhart Stormvein", itemIds = { 193756, 193752, 193691, 193750, 193754, 193755, 193751, 193748, 198059, 198058, 198056, 193753, 256428 } },
+            { bossId = 2503, name = "Kyrakka and Erkhart Stormvein", itemIds = { 193756, 193752, 193691, 193750, 193754, 193755, 193751, 193748, 193753, 256428 } },
         },
     },
     {
@@ -83,9 +83,9 @@ Where2GoSources.DUNGEONS = {
         name = "Temple of Sethraliss",
         encounters = {
             { bossId = 2142, name = "Adderis and Aspix", itemIds = { 159317, 159380, 158370, 159259, 159425, 159329, 159636, 159388, 159263, 159435 } },
-            { bossId = 2143, name = "Merektha", itemIds = { 159637, 159327, 159437, 159375, 162544, 158367, 158714, 159255, 160832, 159437 } },
+            { bossId = 2143, name = "Merektha", itemIds = { 159637, 159327, 159375, 162544, 158367, 158714, 159255 } },
             { bossId = 2144, name = "Galvazzt", itemIds = { 159247, 159442, 158374, 158366, 158369, 159664 } },
-            { bossId = 2145, name = "Avatar of Sethraliss", itemIds = { 159374, 158373, 159254, 159318, 158368, 159370, 159424, 159337, 159257, 159439, 239032, 239031, 239033, 239034, 239035, 239036, 239037, 278982, 239035, 159374, 239031, 159254, 239033, 159318, 239034, 159370, 239036, 159424, 239032, 159257, 239037, 159439 } },
+            { bossId = 2145, name = "Avatar of Sethraliss", itemIds = { 159374, 158373, 159254, 159318, 158368, 159370, 159424, 159337, 159257, 159439, 278982, 159374, 159254, 159318, 159370, 159424, 159257, 159439 } },
         },
     },
 }

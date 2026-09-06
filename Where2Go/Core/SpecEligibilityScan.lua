@@ -72,6 +72,28 @@ function Where2GoSpecEligibilityScan.CheckExportSeasonStale(export, currentSeaso
     return export ~= nil and export.seasonVersion ~= nil and export.seasonVersion ~= currentSeasonLabel
 end
 
+-- Pure: given the item IDs Where2GoSources.lua tracks for one source
+-- (`knownItemIds`, a plain array) and the item IDs the Encounter
+-- Journal's CURRENT unfiltered (no class/spec filter) loot list actually
+-- contains for that source (`realItemIds`, `{[itemId]=true,...}`),
+-- returns the known item IDs that are NOT in the real list -- i.e. items
+-- Sources.lua still tracks that the live Encounter Journal no longer
+-- lists as droppable at all here, regardless of spec. This is a stronger
+-- signal than a spec-eligibility gap: an item missing from realItemIds
+-- can never match any spec because it just isn't real loot right now
+-- (Sources.lua itself needs correcting), versus an item present in
+-- realItemIds but still unmatched by every spec scanned, which is a
+-- genuine per-spec attribution question instead.
+function Where2GoSpecEligibilityScan.FindStaleItemIds(knownItemIds, realItemIds)
+    local stale = {}
+    for _, itemId in ipairs(knownItemIds) do
+        if not realItemIds[itemId] then
+            table.insert(stale, itemId)
+        end
+    end
+    return stale
+end
+
 local _running = false
 local _progressCallbacks = {}
 
@@ -104,21 +126,19 @@ local function EnsureEncounterJournalLoaded()
     end
 end
 
--- Every dungeon/raid entry Where2GoSources.lua tracks, in one flat list,
--- each still carrying its own `encounters` array -- the scan loop below
--- iterates this directly rather than DUNGEONS/RAIDS separately, since
--- both need identical treatment (select the instance, then scan its
--- combined loot once per class/spec).
-local function AllTrackedSources()
-    local all = {}
-    for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
-        table.insert(all, dungeon)
-    end
-    for _, raid in ipairs(Where2GoSources.RAIDS) do
-        table.insert(all, raid)
-    end
-    return all
-end
+-- EJ difficulty IDs the Encounter Journal scopes its loot list to --
+-- EJ_SelectInstance alone does not imply a difficulty, and
+-- GetLootInfoByIndex reads whatever difficulty EJ_SetDifficulty last set,
+-- which otherwise carries over unset/stale between calls. Confirmed
+-- against a published addon's own working EJ call sequence
+-- (Tercioo/Details-Framework's ejournal.lua, which always calls
+-- EJ_SetDifficulty before EJ_SelectInstance, and separately selects a
+-- different EJ tier for Mythic+ dungeons vs raids) and against Warcraft
+-- Wiki's DifficultyID list. Dungeons need Mythic Keystone specifically
+-- (not e.g. Heroic) since Where2GoSources.lua's dungeon item pools are
+-- the M+-track items; raids need Mythic for the same reason.
+local EJ_MYTHIC_KEYSTONE_DIFFICULTY = 8
+local EJ_MYTHIC_RAID_DIFFICULTY = 16
 
 local function CollectCurrentLootItemIds()
     local ids = {}
@@ -153,6 +173,87 @@ local function CollectSourceItemIds(source)
     return ids
 end
 
+-- Scans one dungeon/raid entry at the given EJ difficulty, merging
+-- matched items for every class/spec in the game into `bySpec`. Factored
+-- out of RunFullScan so dungeons (Mythic Keystone difficulty) and raids
+-- (Mythic raid difficulty) share the same per-source/per-spec loop while
+-- each selects the correct EJ difficulty for their category first.
+-- Returns this source's stale item IDs (see FindStaleItemIds above).
+local function ScanSourceIntoBySpec(source, difficultyId, bySpec, numClasses, sex)
+    EJ_SetDifficulty(difficultyId)
+    -- EJ_SelectEncounter selects a boss WITHIN the currently selected
+    -- instance -- it needs EJ_SelectInstance called first, or it
+    -- silently selects nothing (EJ_GetNumLoot then returns 0 for every
+    -- boss, which would make every tracked item look stale). This
+    -- selection gets overwritten again below by the whole-instance
+    -- reselect once the per-encounter loop is done.
+    EJ_SelectInstance(source.instanceId)
+
+    -- Stale-item check: per encounter (EJ_SelectEncounter), NOT the
+    -- whole-instance aggregate view used below for BY_SPEC. Confirmed
+    -- live that the no-encounter-selected aggregate view doesn't
+    -- reliably honor EJ_SetDifficulty for every boss in a multi-boss
+    -- instance -- a Normal-only item (Merektha's Fangproof Gauntlets,
+    -- Temple of Sethraliss) still showed up as "real" loot through the
+    -- aggregate view at Mythic Keystone difficulty, and only stopped
+    -- appearing once queried per-encounter. One extra EJ_SelectEncounter
+    -- call per boss (37 total across the whole scan) is negligible next
+    -- to the ~40-spec loop below, and this check only runs once per
+    -- source regardless.
+    local realItemIds = {}
+    for _, encounter in ipairs(source.encounters) do
+        EJ_SelectEncounter(encounter.bossId)
+        EJ_SetLootFilter(0, 0)
+        for itemId in pairs(CollectCurrentLootItemIds()) do
+            realItemIds[itemId] = true
+        end
+    end
+
+    -- BY_SPEC matching stays on the whole-instance aggregate view
+    -- (EJ_SelectInstance alone, no EJ_SelectEncounter) -- Phase 8b's
+    -- per-instance-not-per-boss optimization, unaffected by the
+    -- per-encounter stale check above since BY_SPEC has no per-boss
+    -- grouping to begin with.
+    EJ_SelectInstance(source.instanceId)
+    local sourceItemIds = CollectSourceItemIds(source)
+    local staleItemIds = Where2GoSpecEligibilityScan.FindStaleItemIds(sourceItemIds, realItemIds)
+
+    for classIndex = 1, numClasses do
+        local _, _, classId = GetClassInfo(classIndex)
+        if classId then
+            -- `or 0` and the specId nil-check below are defensive:
+            -- neither API is expected to return nil for a real
+            -- class/spec index on current retail (class IDs 1-13
+            -- are contiguous), but if one ever did, skipping just
+            -- that class/spec is safer than letting a `for` loop
+            -- raise "'for' limit must be a number" and having the
+            -- pcall in Start() abort the whole scan.
+            local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId) or 0
+            for specIndex = 1, numSpecs do
+                local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
+                if specId then
+                    EJ_SetLootFilter(classId, specId)
+                    local filtered = CollectCurrentLootItemIds()
+                    local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, sourceItemIds)
+                    -- Every spec actually scanned gets a bySpec entry
+                    -- regardless of whether anything matched here, so
+                    -- a spec that now matches nothing ends up with an
+                    -- empty {} (per MergeBySpec's contract above)
+                    -- instead of silently keeping a prior pass's
+                    -- stale entry.
+                    local existing = bySpec[specId] or {}
+                    for itemId in pairs(matched) do
+                        existing[itemId] = true
+                    end
+                    bySpec[specId] = existing
+                end
+            end
+        end
+    end
+
+    return staleItemIds
+end
+
 -- The actual scan: for every tracked dungeon/raid, for every class/spec
 -- in the game, ask the Encounter Journal which of that instance's known
 -- items (across all its bosses at once, see CollectSourceItemIds) this
@@ -160,52 +261,38 @@ end
 -- call here is local client data with no server round-trip, unlike the
 -- old tooltip-read/SetLootSpecialization flow. Wrapped in pcall by
 -- Start() below, so any error here still leaves _running reset
--- correctly.
+-- correctly. Returns bySpec plus staleItems -- a maintainer-facing
+-- diagnostic list of Sources.lua item IDs the live Encounter Journal no
+-- longer lists as droppable for their instance at all (see
+-- FindStaleItemIds), one entry per source that has any, so a single
+-- genspec run can flag Sources.lua data-quality drift instead of it only
+-- surfacing as an unexplained spec-eligibility gap.
 local function RunFullScan()
     local bySpec = {}
+    local staleItems = {}
     local numClasses = GetNumClasses()
     local sex = UnitSex("player")
 
-    for _, source in ipairs(AllTrackedSources()) do
-        EJ_SelectInstance(source.instanceId)
-        local sourceItemIds = CollectSourceItemIds(source)
-
-        for classIndex = 1, numClasses do
-            local _, _, classId = GetClassInfo(classIndex)
-            if classId then
-                -- `or 0` and the specId nil-check below are defensive:
-                -- neither API is expected to return nil for a real
-                -- class/spec index on current retail (class IDs 1-13
-                -- are contiguous), but if one ever did, skipping just
-                -- that class/spec is safer than letting a `for` loop
-                -- raise "'for' limit must be a number" and having the
-                -- pcall in Start() abort the whole scan.
-                local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classId) or 0
-                for specIndex = 1, numSpecs do
-                    local specId = GetSpecializationInfoForClassID(classId, specIndex, sex)
-                    if specId then
-                        EJ_SetLootFilter(classId, specId)
-                        local filtered = CollectCurrentLootItemIds()
-                        local matched = Where2GoSpecEligibilityScan.FilterKnownItemIds(filtered, sourceItemIds)
-                        -- Every spec actually scanned gets a bySpec entry
-                        -- regardless of whether anything matched here, so
-                        -- a spec that now matches nothing ends up with an
-                        -- empty {} (per MergeBySpec's contract above)
-                        -- instead of silently keeping a prior pass's
-                        -- stale entry.
-                        local existing = bySpec[specId] or {}
-                        for itemId in pairs(matched) do
-                            existing[itemId] = true
-                        end
-                        bySpec[specId] = existing
-                    end
-                end
-            end
+    local function scanAndRecordStale(source, difficultyId)
+        local staleItemIds = ScanSourceIntoBySpec(source, difficultyId, bySpec, numClasses, sex)
+        if #staleItemIds > 0 then
+            table.insert(staleItems, {
+                instanceId = source.instanceId,
+                instanceName = source.name,
+                itemIds = staleItemIds,
+            })
         end
     end
 
+    for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
+        scanAndRecordStale(dungeon, EJ_MYTHIC_KEYSTONE_DIFFICULTY)
+    end
+    for _, raid in ipairs(Where2GoSources.RAIDS) do
+        scanAndRecordStale(raid, EJ_MYTHIC_RAID_DIFFICULTY)
+    end
+
     EJ_SetLootFilter(0, 0)
-    return bySpec
+    return bySpec, staleItems
 end
 
 function Where2GoSpecEligibilityScan.Start()
@@ -225,7 +312,7 @@ function Where2GoSpecEligibilityScan.Start()
     end
 
     _running = true
-    local ok, result = pcall(RunFullScan)
+    local ok, bySpecResult, staleItemsResult = pcall(RunFullScan)
     _running = false
 
     if not ok then
@@ -233,7 +320,7 @@ function Where2GoSpecEligibilityScan.Start()
         -- standard addon idiom -- routes to whatever error-display
         -- addon/console the player has, same as an unhandled Lua error
         -- would), rather than swallowing it silently.
-        geterrorhandler()(result)
+        geterrorhandler()(bySpecResult)
         NotifyProgress(nil, nil, nil, "ABORTED_ERROR")
         return false, "ERROR"
     end
@@ -242,7 +329,14 @@ function Where2GoSpecEligibilityScan.Start()
         seasonVersion = Where2GoConstants.SEASON_LABEL,
         bySpec = Where2GoSpecEligibilityScan.MergeBySpec(
             Where2GoDB.specEligibilityExport and Where2GoDB.specEligibilityExport.bySpec,
-            result),
+            bySpecResult),
+        -- Always a full overwrite, never merged with a prior run's
+        -- staleItems -- unlike bySpec (which Phase 8b's own design allows
+        -- scanning incrementally spec-by-spec across multiple sessions),
+        -- every RunFullScan pass already covers every tracked source in
+        -- one go, so a prior pass's staleItems entry can never be more
+        -- current than this one.
+        staleItems = staleItemsResult,
     }
     NotifyProgress(nil, nil, nil, "COMPLETE")
     return true

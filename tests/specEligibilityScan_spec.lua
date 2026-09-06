@@ -35,6 +35,23 @@ assert(replaced[71][999] == true, "should replace spec 71 wholesale with the new
 assert(replaced[71][100] == nil, "should not keep spec 71's stale old item after a full re-scan of that spec")
 assert(replaced[72][200] == true, "should still preserve untouched spec 72")
 
+-- FindStaleItemIds: known items missing from the current unfiltered EJ
+-- loot list are flagged stale (Sources.lua tracks them but the live
+-- Encounter Journal no longer lists them as droppable at all); known
+-- items present in the real list are never flagged, regardless of spec
+-- attribution.
+local knownItems = { 100, 200, 300 }
+local realItems = { [100] = true, [300] = true }
+local stale = Where2GoSpecEligibilityScan.FindStaleItemIds(knownItems, realItems)
+assert(#stale == 1, "exactly one known item (200) is missing from the real list")
+assert(stale[1] == 200, "the missing item should be 200")
+
+local noneStale = Where2GoSpecEligibilityScan.FindStaleItemIds(knownItems, { [100] = true, [200] = true, [300] = true })
+assert(#noneStale == 0, "every known item present in the real list -- nothing stale")
+
+local allStale = Where2GoSpecEligibilityScan.FindStaleItemIds(knownItems, {})
+assert(#allStale == 3, "empty real list -- every known item is stale")
+
 -- CheckExportSeasonStale: nil export or matching season is never stale;
 -- a season mismatch is stale.
 assert(Where2GoSpecEligibilityScan.CheckExportSeasonStale(nil, "S2") == false, "nil export is never stale")
