@@ -33,6 +33,7 @@ if CreateFrame then
         local itemId = Where2GoVoidcoreHistory.ParseItemIdFromLink(itemLink)
         if itemId then
             Where2GoCharDB.voidcoreObtainedItems[itemId] = true
+            Where2GoPreferences.Notify("VOIDCORE")
         end
     end)
 end

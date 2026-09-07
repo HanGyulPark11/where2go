@@ -13,6 +13,10 @@ local specs = {
     "tests/voidcorehistory_spec.lua",
     "tests/specEligibilityScan_spec.lua",
     "tests/itembrowser_spec.lua",
+    "tests/selection_spec.lua",
+    "tests/preferences_spec.lua",
+    "tests/panel_spec.lua",
+    "tests/browserpanel_spec.lua",
 }
 
 local failureCount = 0

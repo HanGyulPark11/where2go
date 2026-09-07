@@ -48,11 +48,10 @@ local function HandlePrefCommand(args)
             return
         end
         if action == "add" then
-            Where2GoCharDB.preferredItems[purpose][itemId] = true
+            Where2GoPreferences.Add(purpose, { [itemId] = true })
             print(string.format("Where2Go: added item %d to %s preferred items.", itemId, purpose))
         else
-            Where2GoCharDB.preferredItems[purpose][itemId] = nil
-            Where2GoCharDB.preferredItemSources[purpose][itemId] = nil
+            Where2GoPreferences.Remove(purpose, itemId)
             print(string.format("Where2Go: removed item %d from %s preferred items.", itemId, purpose))
         end
     elseif action == "list" then

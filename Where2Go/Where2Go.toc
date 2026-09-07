@@ -14,6 +14,8 @@ Core\VoidcacheIds.lua
 Core\SpecEligibilityData.lua
 Core\ItemStats.lua
 Core\ItemBrowser.lua
+Core\Selection.lua
+Core\Preferences.lua
 Core\RaidRanks.lua
 Core\Ranking.lua
 Core\DirectDrop.lua
@@ -23,6 +25,7 @@ Core\SpecEligibilityScan.lua
 Core\Compare.lua
 Core\Equipment.lua
 Core\Init.lua
+UI\Theme.lua
 UI\ItemRow.lua
 UI\Panel.lua
 UI\BrowserPanel.lua

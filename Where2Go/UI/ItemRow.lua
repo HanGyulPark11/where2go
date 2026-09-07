@@ -173,7 +173,7 @@ function Where2GoItemRow.CreateWidgets(row, iconSize, leftOffset)
     -- at" feedback.
     row.highlight = row:CreateTexture(nil, "BACKGROUND")
     row.highlight:SetAllPoints()
-    row.highlight:SetColorTexture(0.102, 0.075, 0.035, 1)
+    row.highlight:SetColorTexture(unpack(Where2GoTheme.colors.hover))
     row.highlight:Hide()
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -189,12 +189,13 @@ function Where2GoItemRow.CreateWidgets(row, iconSize, leftOffset)
     row.summary:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
     row.summary:SetJustifyH("LEFT")
     row.summary:SetWordWrap(false)
+    row.summary:SetTextColor(unpack(Where2GoTheme.colors.muted))
 end
 
 -- Fills an already-built row's widgets for one item and wires hover ->
 -- real GameTooltip. `ilvl` is the caller-computed effective item level
 -- for this item's source (nil is fine -- the summary line just omits it,
--- used by Staged/Preferred rows which don't carry a single fixed
+-- used by Preferred rows which don't carry a single fixed
 -- source). `sourceLabel` (optional) is appended as an extra tooltip line
 -- -- e.g. which dungeon or raid boss drops this item -- kept out of the
 -- visible row text per this project's "no boss-name clutter" item-row
@@ -209,13 +210,10 @@ end
 -- see docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md and
 -- the wow-item-level-bonus-id-system vault page's "SetHyperlink vs
 -- SetItemByID" note. Falls back to SetItemByID when bonusId is nil
--- (Staged/Preferred rows, which don't carry a fixed source/track).
+-- (for saved preferences without a recorded source/track).
 --
--- Cold-item-cache items show a placeholder icon/name; only
--- UI/BrowserPanel.lua's Results rows self-heal automatically (its
--- GET_ITEM_INFO_RECEIVED watcher triggers a rebuild) -- UI/Panel.lua's
--- cards populate once per card build and refresh only when the panel is
--- next reopened, matching this file's pre-existing behavior.
+-- Cold-item-cache items show a placeholder icon/name. Both windows refresh
+-- their existing rows after relevant item-cache events while visible.
 function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId)
     local name, _, quality = C_Item.GetItemInfo(itemId)
     local icon = C_Item.GetItemIconByID(itemId)

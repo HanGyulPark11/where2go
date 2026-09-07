@@ -1,752 +1,503 @@
-local browserFrame
-local currentMode = "DROP"  -- "DROP" | "VOIDCORE"
-local itemPool
-local filters = { sources = {}, slots = {}, stats = {}, specEligibleOnly = true, searchText = nil, specIds = {} }
-local filteredResults = {}
-local stagedSelection = {}  -- itemId -> bonusId (real track bonus ID, for the tooltip -- see UI/ItemRow.lua), cleared on "clear selection" or after commit
-local specDropdown
-local sourceDropdown
-local slotDropdown
-local statDropdown
-
--- Forward declarations (same pattern UI/Panel.lua uses for `Layout`).
-local RebuildFilteredResults
-local RefreshStagedRows
-local RefreshPreferredRows
-
+-- Independent item management. Transient selection never changes preferences
+-- until committed; preference transactions refresh both windows immediately.
+Where2GoBrowserPanel = {}
+local T, L = Where2GoTheme, Where2GoLocale.L
+local frame, pool, selection
+local currentMode = "DROP"
+local filters = { sources = {}, slots = {}, stats = {}, specIds = {}, specEligibleOnly = true }
+local results, preferredIds, resultRows, preferredRows = {}, {}, {}, {}
+local resultOffset, preferredOffset = 0, 0
+local ROW_HEIGHT, ROWS, RESULT_WIDTH, PREFERRED_WIDTH = 36, 11, 568, 344
+local dropdownUpdates, pendingItems = {}, {}
+local refreshing = false
+local Refresh, UpdateActions, RefreshRows
 local SLOT_ORDER = { "HEAD", "NECK", "SHOULDER", "BACK", "CHEST", "WRIST", "HANDS", "WAIST", "LEGS", "FEET", "FINGER", "TRINKET", "MAINHAND", "OFFHAND" }
 local STAT_ORDER = { "CRIT_RATING", "HASTE_RATING", "MASTERY_RATING", "VERSATILITY" }
 
-local ROW_HEIGHT = 34
-local ICON_SIZE = 26
-local RESULTS_WIDTH, STAGED_WIDTH, PREFERRED_WIDTH = 360, 200, 260
-local VISIBLE_ROWS, STAGED_VISIBLE_ROWS, PREFERRED_VISIBLE_ROWS = 10, 10, 10
-
-local function GetItemSlot(itemId)
-    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemId)
-    return equipLoc and Where2GoConstants.EQUIPLOC_TO_SLOT[equipLoc]
-end
-
--- The player's own class's specs (GetSpecialization's own scoping) --
--- used both by the multi-select spec dropdown and by GetItemEligible's
--- "nothing explicitly selected" fallback below.
-local function GetAvailableSpecs()
+local function AvailableSpecs()
     local specs = {}
     for i = 1, GetNumSpecializations() do
-        local specId, specName = GetSpecializationInfo(i)
-        if specId then
-            table.insert(specs, { specId = specId, specName = specName })
-        end
+        local id, name = GetSpecializationInfo(i)
+        if id then table.insert(specs, { id = id, name = name }) end
     end
     return specs
 end
 
--- An item is eligible if AT LEAST ONE relevant spec can use it (union,
--- not intersection). "Relevant" is the player's explicit spec selection
--- if any is checked, otherwise every spec of the player's own class --
--- so leaving the dropdown untouched shows anything any of your specs
--- could use, not just your currently active one.
-local function GetItemEligible(itemId)
-    local specIds = filters.specIds
-    if specIds and next(specIds) ~= nil then
-        for specId in pairs(specIds) do
-            if Where2GoDirectDrop.IsEligibleForSpec(specId)(itemId) then
-                return true
-            end
-        end
-        return false
-    end
-    for _, spec in ipairs(GetAvailableSpecs()) do
-        if Where2GoDirectDrop.IsEligibleForSpec(spec.specId)(itemId) then
-            return true
-        end
+local function ItemName(id) return C_Item.GetItemInfo(id) or ("Item #" .. id) end
+
+local function ItemEligible(id)
+    local explicit = next(filters.specIds) ~= nil
+    for _, spec in ipairs(AvailableSpecs()) do
+        if (not explicit or filters.specIds[spec.id]) and Where2GoDirectDrop.IsEligibleForSpec(spec.id)(id) then return true end
     end
     return false
 end
 
-local function GetItemName(itemId)
-    return Where2GoDirectDrop.GetItemNames({ itemId })[itemId]
+local function EntryLevel(entry)
+    if entry.kind == "dungeon" then return Where2GoRaidRanks.GetMythicPlusIlvl() end
+    return Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
 end
 
--- Individual items don't carry a fixed ilvl in Sources.lua -- gear scales
--- with the player's current Mythic+/raid track, the same way
--- Core/DirectDrop.lua's BuildContentList already computes it per content.
--- Returns (ilvl, bonusId) -- bonusId lets ItemRow.Populate build a real
--- tracked tooltip link instead of showing the item's cached base ilvl.
-local function GetEntryIlvl(entry)
-    if entry.kind == "dungeon" then
-        local ilvl, _trackKey, _rank, bonusId = Where2GoRaidRanks.GetMythicPlusIlvl()
-        return ilvl, bonusId
+local function Clamp(offset, count) return math.max(0, math.min(offset, math.max(0, count - ROWS))) end
+
+local function Feedback(key, count)
+    frame.feedback:SetText(count and string.format(L(key), count) or L(key))
+    UpdateActions()
+end
+
+local function Add(items)
+    local count = Where2GoPreferences.Add(currentMode, items)
+    if count > 0 then Feedback("ADDED_FEEDBACK", count) end
+end
+
+local function Remove(id)
+    local count = Where2GoPreferences.Remove(currentMode, id)
+    if count > 0 then Feedback("REMOVED_FEEDBACK", count) end
+end
+
+UpdateActions = function()
+    local selected, available = selection:GetCounts()
+    frame.selectAll:SetEnabled(available > 0)
+    frame.selectAll:SetChecked(available > 0 and selected == available)
+    frame.selectAll.partial:SetShown(selected > 0 and selected < available)
+    frame.selectionCount:SetText(string.format(L("SELECTED_COUNT"), selected, available))
+    frame.addSelected:SetText(string.format(L("ADD_COUNT"), selected))
+    frame.addSelected:SetEnabled(selected > 0)
+    frame.clearSelection:SetEnabled(selected > 0)
+    frame.clearPreferred:SetEnabled(#preferredIds > 0)
+    frame.undo:SetEnabled(Where2GoPreferences.HasUndo(currentMode))
+end
+
+local function SyncScrollbar(slider, count, offset)
+    slider:SetMinMaxValues(0, math.max(0, count - ROWS))
+    slider:SetValue(offset)
+    slider:SetShown(count > ROWS)
+end
+
+RefreshRows = function()
+    local preferred, sources = Where2GoPreferences.Get(currentMode)
+    local selected = selection:GetSelected()
+    for i, row in ipairs(resultRows) do
+        local entry = results[resultOffset + i]
+        row.entry = entry
+        row:SetShown(entry ~= nil)
+        if entry then
+            local source = entry.raidName and (entry.raidName .. " - " .. entry.bossName) or entry.contentName
+            Where2GoItemRow.Populate(row, entry.itemId, entry.ilvl, source, entry.bonusId)
+            local saved = preferred[entry.itemId] == true
+            row.checkbox:SetEnabled(not saved)
+            row.checkbox:SetChecked(selected[entry.itemId] ~= nil)
+            row.selectedBg:SetShown(selected[entry.itemId] ~= nil)
+            row.add:SetText(saved and L("SAVED") or L("ADD_ONE"))
+            row.add:SetEnabled(not saved)
+        end
     end
-    local ilvl, _trackKey, _rank, bonusId = Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
-    return ilvl, bonusId
-end
-
-local function GetEntrySourceLabel(entry)
-    if entry.raidName then
-        return entry.raidName .. " - " .. entry.bossName
+    for i, row in ipairs(preferredRows) do
+        local id = preferredIds[preferredOffset + i]
+        row.itemId = id
+        row:SetShown(id ~= nil)
+        if id then Where2GoItemRow.Populate(row, id, nil, nil, sources[id]) end
     end
-    return entry.contentName
+    SyncScrollbar(frame.resultScroll, #results, resultOffset)
+    SyncScrollbar(frame.preferredScroll, #preferredIds, preferredOffset)
 end
 
-local function BuildContext()
-    return {
-        getSlot = GetItemSlot,
-        isEligible = GetItemEligible,
-        getItemName = GetItemName,
+Refresh = function(resetSelection)
+    if not frame or not pool or refreshing then return end
+    refreshing = true
+    local preferred = Where2GoPreferences.Get(currentMode)
+    local context = {
+        getSlot = function(id)
+            local _, _, _, loc = C_Item.GetItemInfoInstant(id)
+            return Where2GoConstants.EQUIPLOC_TO_SLOT[loc]
+        end,
+        getItemName = ItemName, isEligible = ItemEligible,
     }
-end
-
-local function IsPreferred(itemId)
-    return Where2GoCharDB.preferredItems[currentMode][itemId] == true
-end
-
-local resultRows = {}
-local scrollOffset = 0
-local stagedScrollOffset = 0
-local preferredScrollOffset = 0
-
-local function ClampScrollOffset()
-    local maxOffset = math.max(0, #filteredResults - VISIBLE_ROWS)
-    if scrollOffset < 0 then
-        scrollOffset = 0
-    elseif scrollOffset > maxOffset then
-        scrollOffset = maxOffset
-    end
-end
-
-local function RefreshVisibleRows()
-    for i = 1, VISIBLE_ROWS do
-        local row = resultRows[i]
-        local entry = filteredResults[scrollOffset + i]
-        if entry and row then
-            row:Show()
-            row.entry = entry
-            local ilvl, bonusId = GetEntryIlvl(entry)
-            row.bonusId = bonusId
-            Where2GoItemRow.Populate(row, entry.itemId, ilvl, GetEntrySourceLabel(entry), bonusId)
-            row.checkbox:SetChecked(stagedSelection[entry.itemId] ~= nil)
-        elseif row then
-            row:Hide()
-            row.entry = nil
+    local filtered = Where2GoItemBrowser.FilterItems(pool, filters, context)
+    filtered = Where2GoItemBrowser.SortItems(filtered, "NAME", context)
+    results = {}
+    local seen = {}
+    for _, entry in ipairs(filtered) do
+        if not seen[entry.itemId] then
+            seen[entry.itemId] = true
+            local ilvl, _, _, bonusId = EntryLevel(entry)
+            entry.ilvl, entry.bonusId = ilvl, bonusId
+            table.insert(results, entry)
         end
     end
+    selection:SetResults(results, preferred, resetSelection == true)
+    preferredIds = {}
+    for id, saved in pairs(preferred) do if saved then table.insert(preferredIds, id) end end
+    table.sort(preferredIds, function(a, b)
+        local an, bn = ItemName(a), ItemName(b)
+        if an == bn then return a < b end
+        return an < bn
+    end)
+    resultOffset = Clamp(resetSelection and 0 or resultOffset, #results)
+    preferredOffset = Clamp(preferredOffset, #preferredIds)
+    frame.resultTitle:SetText(string.format(L("RESULTS_COUNT"), #results))
+    frame.preferredTitle:SetText(string.format(L("PREFERRED_COUNT"), #preferredIds))
+    frame.resultEmpty:SetText(L(next(pendingItems) and "LOADING_ITEMS" or "EMPTY_RESULTS"))
+    frame.resultEmpty:SetShown(#results == 0)
+    frame.preferredEmpty:SetShown(#preferredIds == 0)
+    RefreshRows()
+    UpdateActions()
+    refreshing = false
 end
 
-RebuildFilteredResults = function()
-    if not itemPool then
-        return
-    end
-    local unsorted = Where2GoItemBrowser.FilterItems(itemPool, filters, BuildContext())
-    filteredResults = Where2GoItemBrowser.SortItems(unsorted, nil, BuildContext())
-    ClampScrollOffset()
-    RefreshVisibleRows()
-    RefreshStagedRows()
+local function FiltersChanged()
+    frame.feedback:SetText("")
+    Refresh(true)
 end
 
-local stagedRows = {}
+local function SetMode(mode)
+    mode = mode == "VOIDCORE" and "VOIDCORE" or "DROP"
+    local changed = currentMode ~= mode
+    currentMode = mode
+    for key, button in pairs(frame.modeButtons) do
+        T.Box(button, key == mode and "selected" or "surface")
+        button:GetFontString():SetTextColor(unpack(T.colors[key == mode and "accent" or "text"]))
+    end
+    if changed then
+        frame.feedback:SetText("")
+        preferredOffset = 0
+        Refresh(true)
+    end
+end
 
-RefreshStagedRows = function()
-    local items = {}
-    for itemId in pairs(stagedSelection) do
-        table.insert(items, itemId)
-    end
-    table.sort(items)
-    local maxOffset = math.max(0, #items - STAGED_VISIBLE_ROWS)
-    if stagedScrollOffset < 0 then
-        stagedScrollOffset = 0
-    elseif stagedScrollOffset > maxOffset then
-        stagedScrollOffset = maxOffset
-    end
-    for i = 1, STAGED_VISIBLE_ROWS do
-        local row = stagedRows[i]
-        local itemId = items[stagedScrollOffset + i]
-        if itemId and row then
-            row:Show()
-            row.itemId = itemId
-            Where2GoItemRow.Populate(row, itemId, nil, nil, stagedSelection[itemId])
-        elseif row then
-            row:Hide()
-            row.itemId = nil
+local function MakeScrollbar(parent, height, onChange)
+    local slider = CreateFrame("Slider", nil, parent, "BackdropTemplate")
+    slider:SetSize(10, height)
+    slider:SetPoint("TOPRIGHT", -5, -6)
+    T.Box(slider, "surface")
+    slider:SetOrientation("VERTICAL")
+    slider:SetValueStep(1)
+    slider:SetObeyStepOnDrag(true)
+    slider:SetMinMaxValues(0, 0)
+    slider:SetThumbTexture("Interface\\Buttons\\WHITE8x8")
+    slider:GetThumbTexture():SetSize(8, 28)
+    slider:GetThumbTexture():SetVertexColor(unpack(T.colors.muted))
+    slider:SetScript("OnValueChanged", function(_, value)
+        if not refreshing then onChange(math.floor(value + 0.5)) end
+    end)
+    return slider
+end
+
+local function EmptyLabel(parent, width, text)
+    local label = T.Text(parent, "GameFontHighlight", text)
+    label:SetPoint("TOPLEFT", 22, -36)
+    label:SetWidth(width - 44)
+    label:SetJustifyH("CENTER")
+    label:SetTextColor(unpack(T.colors.muted))
+    return label
+end
+
+local function CreateDropdown(parent, x, y, width, defaultKey, getOptions, isSelected, toggle, enabled)
+    local dropdown = CreateFrame("DropdownButton", nil, parent, "WowStyle1FilterDropdownTemplate")
+    dropdown:SetPoint("TOPLEFT", x, y)
+    dropdown:SetWidth(width)
+    local function Update()
+        local labels = {}
+        for _, option in ipairs(getOptions()) do
+            if option.id and isSelected(option.id) then table.insert(labels, option.name) end
         end
+        if #labels == 0 then dropdown.Text:SetText(L(defaultKey))
+        elseif #labels == 1 then dropdown.Text:SetText(labels[1])
+        else dropdown.Text:SetText(string.format(L("FILTER_MORE"), labels[1], #labels - 1)) end
+        if enabled then dropdown:SetEnabled(enabled()) end
     end
-end
-
-local preferredRows = {}
-
-RefreshPreferredRows = function()
-    local items = {}
-    for itemId in pairs(Where2GoCharDB.preferredItems[currentMode]) do
-        table.insert(items, itemId)
-    end
-    table.sort(items)
-    local maxOffset = math.max(0, #items - PREFERRED_VISIBLE_ROWS)
-    if preferredScrollOffset < 0 then
-        preferredScrollOffset = 0
-    elseif preferredScrollOffset > maxOffset then
-        preferredScrollOffset = maxOffset
-    end
-    for i = 1, PREFERRED_VISIBLE_ROWS do
-        local row = preferredRows[i]
-        local itemId = items[preferredScrollOffset + i]
-        if itemId and row then
-            row:Show()
-            row.itemId = itemId
-            Where2GoItemRow.Populate(row, itemId, nil, nil, Where2GoCharDB.preferredItemSources[currentMode][itemId])
-        elseif row then
-            row:Hide()
-            row.itemId = nil
-        end
-    end
-end
-
--- Shared by every multi-select dropdown's button-label text (Source,
--- Stat, Spec): count how many keys/entries are truthy in a filters
--- table, and format the "%d selected" label.
-local function CountSelected(t)
-    local count = 0
-    for _ in pairs(t) do
-        count = count + 1
-    end
-    return count
-end
-
-local function NSelectedText(count)
-    return string.format(Where2GoLocale.L("SOURCE_DROPDOWN_N_SELECTED"), count)
-end
-
--- Colors ported directly from the Phase 9 design mockup's CSS (dark
--- stone/parchment + gold trim, WoW's own item-quality-adjacent palette).
--- See docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md's
--- mockup link. {r, g, b}, 0-1 floats for SetBackdropColor/SetTextColor.
-local COLORS = {
-    windowBg = { 0.078, 0.055, 0.031 },      -- #140e08
-    windowBorder = { 0.478, 0.353, 0.173 },  -- #7a5a2c
-    gold = { 0.941, 0.831, 0.533 },          -- #f0d488
-    mutedTan = { 0.541, 0.459, 0.314 },      -- #8a7550
-    toolbarBg = { 0.082, 0.059, 0.031 },     -- #150f08
-    toolbarBorder = { 0.251, 0.192, 0.102 }, -- #40311a
-    headerBg = { 0.110, 0.078, 0.035 },      -- #1c1409
-    panelBg = { 0.063, 0.043, 0.024 },       -- #100b06
-}
-
-local function CreateBrowserPanel()
-    local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame:SetSize(860, 720)
-    frame:SetPoint("CENTER")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 2,
-    })
-    frame:SetBackdropColor(unpack(COLORS.windowBg))
-    frame:SetBackdropBorderColor(unpack(COLORS.windowBorder))
-
-    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeButton:SetPoint("TOPRIGHT", -4, -4)
-    closeButton:SetScript("OnClick", function() frame:Hide() end)
-
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 12, -12)
-    title:SetText(Where2GoLocale.L("BROWSER_TITLE"))
-    title:SetTextColor(unpack(COLORS.gold))
-
-    -- Drop/Voidcore mode toggle
-    local dropButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    dropButton:SetSize(80, 20)
-    dropButton:SetPoint("TOPLEFT", 12, -36)
-    dropButton:SetText(Where2GoLocale.L("MODE_DROP"))
-    local voidcoreButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    voidcoreButton:SetSize(80, 20)
-    voidcoreButton:SetPoint("LEFT", dropButton, "RIGHT", 6, 0)
-    voidcoreButton:SetText(Where2GoLocale.L("MODE_VOIDCORE"))
-    local function SetMode(mode)
-        if mode == currentMode then
-            return
-        end
-        currentMode = mode
-        if mode == "DROP" then
-            dropButton:LockHighlight()
-            voidcoreButton:UnlockHighlight()
-            dropButton:GetFontString():SetTextColor(unpack(COLORS.gold))
-            voidcoreButton:GetFontString():SetTextColor(1, 1, 1)
-        else
-            voidcoreButton:LockHighlight()
-            dropButton:UnlockHighlight()
-            voidcoreButton:GetFontString():SetTextColor(unpack(COLORS.gold))
-            dropButton:GetFontString():SetTextColor(1, 1, 1)
-        end
-        stagedSelection = {}
-        RebuildFilteredResults()
-        RefreshPreferredRows()
-    end
-    dropButton:SetScript("OnClick", function() SetMode("DROP") end)
-    voidcoreButton:SetScript("OnClick", function() SetMode("VOIDCORE") end)
-
-    -- Filter toolbar: Source/Slot/Stat dropdowns grouped into one bordered
-    -- bar (matches the mockup's single "toolbar" box) instead of floating
-    -- independently at their own frame-relative anchors -- the layout
-    -- complaint this task fixes ("필터 버튼들의 위치가 너무 중구난방").
-    local toolbarFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    toolbarFrame:SetPoint("TOPLEFT", dropButton, "BOTTOMLEFT", 0, -8)
-    toolbarFrame:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
-    toolbarFrame:SetHeight(34)
-    toolbarFrame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    toolbarFrame:SetBackdropColor(unpack(COLORS.toolbarBg))
-    toolbarFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
-
-    -- Merged multi-select "Source" dropdown (replaces the old separate
-    -- Dungeon/Boss toggle-button rows). Built on Blizzard's current
-    -- Menu system (CreateCheckbox) rather than the deprecated
-    -- UIDropDownMenuTemplate -- the legacy dropdown's click-time
-    -- checkmark state proved unreliable for multi-select checkboxes in
-    -- this client version (items couldn't be unchecked, and checking
-    -- one item visually cleared others). CreateCheckbox's isSelected/
-    -- setSelected callbacks read and write filters.sources directly.
-    -- IMPORTANT: do NOT call :SetResponder() again on the returned
-    -- description -- MenuTemplates.CreateCheckbox already wires the
-    -- setSelected function passed in as the ONLY responder via
-    -- SetResponder(onSelect) and separately forces SetResponse(
-    -- MenuResponse.Refresh); calling SetResponder a second time (an
-    -- earlier version of this file did) REPLACES that real handler with
-    -- whatever the second call passes, silently turning every click into
-    -- a no-op -- confirmed live (this was the "선택이 안 돼" bug).
-    -- The button's own label is set directly on dropdown.Text
-    -- (SetDefaultText/SetSelectionText looked documented but are nil on
-    -- a plain CreateFrame-built DropdownButton in this client -- also
-    -- confirmed live) and updated manually on every state change, same
-    -- as the pre-migration pattern.
-    -- See docs/superpowers/specs/2026-09-04-phase9-ui-overhaul-design.md.
-    sourceDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSourceDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
-    sourceDropdown:SetPoint("LEFT", toolbarFrame, "LEFT", 8, 0)
-    sourceDropdown:SetWidth(220)
-
-    local function UpdateSourceDropdownText()
-        local count = CountSelected(filters.sources)
-        if count == 0 then
-            sourceDropdown.Text:SetText(Where2GoLocale.L("SOURCE_DROPDOWN_ALL"))
-        else
-            sourceDropdown.Text:SetText(NSelectedText(count))
-        end
-    end
-
-    sourceDropdown:SetupMenu(function(_owner, rootDescription)
-        local function AddSourceOption(key, text)
-            rootDescription:CreateCheckbox(text,
-                function() return filters.sources[key] == true end,
-                function()
-                    if filters.sources[key] == true then
-                        filters.sources[key] = nil
-                    else
-                        filters.sources[key] = true
-                    end
-                    UpdateSourceDropdownText()
-                    RebuildFilteredResults()
+    dropdown:SetupMenu(function(_, root)
+        for _, option in ipairs(getOptions()) do
+            local id, name = option.id, option.name
+            if id then
+                root:CreateCheckbox(name, function() return isSelected(id) end, function()
+                    toggle(id); Update(); FiltersChanged()
                 end)
+            else root:CreateTitle(name) end
         end
+    end)
+    table.insert(dropdownUpdates, Update)
+    Update()
+    return dropdown
+end
 
-        rootDescription:CreateTitle(Where2GoLocale.L("SOURCE_GROUP_DUNGEONS"))
+local function ToggleMap(map, id) map[id] = not map[id] or nil end
+
+local function BuildFilters()
+    local bar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    bar:SetPoint("TOPLEFT", 16, -100)
+    bar:SetSize(928, 82)
+    T.Box(bar, "surface")
+    CreateDropdown(bar, 6, -6, 242, "SOURCE_DROPDOWN_ALL", function()
+        local options = { { name = L("SOURCE_GROUP_DUNGEONS") } }
         for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
-            AddSourceOption("dungeon:" .. dungeon.instanceId, dungeon.name)
+            table.insert(options, { id = "dungeon:" .. dungeon.instanceId, name = dungeon.name })
         end
         for _, raid in ipairs(Where2GoSources.RAIDS) do
-            rootDescription:CreateTitle(raid.name)
-            for _, encounter in ipairs(raid.encounters) do
-                AddSourceOption("boss:" .. encounter.bossId, encounter.name)
+            table.insert(options, { name = raid.name })
+            for _, boss in ipairs(raid.encounters) do
+                table.insert(options, { id = "boss:" .. boss.bossId, name = boss.name })
             end
         end
-    end)
-    UpdateSourceDropdownText()
-
-    -- Slot filter dropdown (multi-select, OR semantics -- an item needs
-    -- ANY checked slot, empty = no filter -- same shape as Source/Stat/
-    -- Spec below, matching the user's explicit request that Slot behave
-    -- like the other multi-select filters rather than a single-pick
-    -- radio group).
-    slotDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSlotDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
-    slotDropdown:SetPoint("LEFT", sourceDropdown, "RIGHT", 10, 0)
-    slotDropdown:SetWidth(130)
-
-    local function UpdateSlotDropdownText()
-        local count = CountSelected(filters.slots)
-        if count == 0 then
-            slotDropdown.Text:SetText(Where2GoLocale.L("SLOT_DROPDOWN_ALL"))
-        else
-            slotDropdown.Text:SetText(NSelectedText(count))
-        end
-    end
-
-    slotDropdown:SetupMenu(function(_owner, rootDescription)
-        for _, slot in ipairs(SLOT_ORDER) do
-            rootDescription:CreateCheckbox(Where2GoLocale.SlotLabel(slot),
-                function() return filters.slots[slot] == true end,
-                function()
-                    if filters.slots[slot] == true then
-                        filters.slots[slot] = nil
-                    else
-                        filters.slots[slot] = true
-                    end
-                    UpdateSlotDropdownText()
-                    RebuildFilteredResults()
-                end)
-        end
-    end)
-    UpdateSlotDropdownText()
-
-    -- Stat filter dropdown (multi-select, AND semantics preserved -- an
-    -- item must have ALL checked stats, see Core/ItemBrowser.lua's
-    -- matchesFilters, unchanged by this task).
-    statDropdown = CreateFrame("DropdownButton", "Where2GoBrowserStatDropdown", toolbarFrame, "WowStyle1FilterDropdownTemplate")
-    statDropdown:SetPoint("LEFT", slotDropdown, "RIGHT", 10, 0)
-    statDropdown:SetWidth(130)
-
-    local function IsStatSelected(stat)
-        for _, s in ipairs(filters.stats) do
-            if s == stat then
-                return true
-            end
-        end
+        return options
+    end, function(id) return filters.sources[id] == true end, function(id) ToggleMap(filters.sources, id) end)
+    CreateDropdown(bar, 264, -6, 158, "SLOT_DROPDOWN_ALL", function()
+        local options = {}
+        for _, id in ipairs(SLOT_ORDER) do table.insert(options, { id = id, name = Where2GoLocale.SlotLabel(id) }) end
+        return options
+    end, function(id) return filters.slots[id] == true end, function(id) ToggleMap(filters.slots, id) end)
+    local function HasStat(id)
+        for _, stat in ipairs(filters.stats) do if stat == id then return true end end
         return false
     end
-
-    local function UpdateStatDropdownText()
-        local count = #filters.stats
-        if count == 0 then
-            statDropdown.Text:SetText(Where2GoLocale.L("STAT_DROPDOWN_ALL"))
-        else
-            statDropdown.Text:SetText(NSelectedText(count))
-        end
-    end
-
-    statDropdown:SetupMenu(function(_owner, rootDescription)
-        for _, stat in ipairs(STAT_ORDER) do
-            rootDescription:CreateCheckbox(Where2GoLocale.StatLabel(stat),
-                function() return IsStatSelected(stat) end,
-                function()
-                    if IsStatSelected(stat) then
-                        for i, s in ipairs(filters.stats) do
-                            if s == stat then
-                                table.remove(filters.stats, i)
-                                break
-                            end
-                        end
-                    else
-                        table.insert(filters.stats, stat)
-                    end
-                    UpdateStatDropdownText()
-                    RebuildFilteredResults()
-                end)
-        end
+    CreateDropdown(bar, 438, -6, 170, "STAT_DROPDOWN_ALL", function()
+        local options = {}
+        for _, id in ipairs(STAT_ORDER) do table.insert(options, { id = id, name = Where2GoLocale.StatLabel(id) }) end
+        return options
+    end, HasStat, function(id)
+        if HasStat(id) then
+            for i, stat in ipairs(filters.stats) do if stat == id then table.remove(filters.stats, i); break end end
+        else table.insert(filters.stats, id) end
     end)
-    UpdateStatDropdownText()
-
-    -- Second filter row: Spec dropdown + "eligible only" checkbox + search
-    -- box, all in one row directly below the toolbar (mockup's "subrow") --
-    -- the search box stretches to fill the remaining width instead of
-    -- sitting in a narrow fixed-width box off to the side.
-    --
-    -- Multi-select spec dropdown: nothing checked means "any spec of my
-    -- class" (GetItemEligible's own fallback above), not "my current
-    -- active spec only".
-    specDropdown = CreateFrame("DropdownButton", "Where2GoBrowserSpecDropdown", frame, "WowStyle1FilterDropdownTemplate")
-    specDropdown:SetPoint("TOPLEFT", toolbarFrame, "BOTTOMLEFT", 0, -10)
-    specDropdown:SetWidth(160)
-
-    -- Spec-eligible-only checkbox (defaults to checked), paired with the
-    -- spec dropdown directly next to it since the two controls work as a
-    -- pair (which spec, and whether to actually filter by it).
-    local eligibleCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    eligibleCheckbox:SetSize(20, 20)
-    eligibleCheckbox:SetPoint("LEFT", specDropdown, "RIGHT", 16, 0)
-    eligibleCheckbox:SetChecked(true)
-    local eligibleLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    eligibleLabel:SetPoint("LEFT", eligibleCheckbox, "RIGHT", 2, 0)
-    eligibleLabel:SetText(Where2GoLocale.L("ELIGIBLE_ONLY"))
-    eligibleCheckbox:SetScript("OnClick", function(self)
+    frame.resetFilters = T.Button(bar, L("FILTER_RESET"), 110, 26, function()
+        filters = { sources = {}, slots = {}, stats = {}, specIds = {}, specEligibleOnly = true }
+        frame.eligible:SetChecked(true)
+        frame.search:SetText("")
+        for _, update in ipairs(dropdownUpdates) do update() end
+        FiltersChanged()
+    end)
+    frame.resetFilters:SetPoint("TOPRIGHT", -8, -6)
+    frame.specDropdown = CreateDropdown(bar, 6, -44, 192, "SPEC_DROPDOWN_ALL", AvailableSpecs,
+        function(id) return filters.specIds[id] == true end,
+        function(id) ToggleMap(filters.specIds, id) end,
+        function() return filters.specEligibleOnly end)
+    frame.eligible = CreateFrame("CheckButton", nil, bar, "UICheckButtonTemplate")
+    frame.eligible:SetSize(24, 24)
+    frame.eligible:SetPoint("TOPLEFT", 210, -45)
+    frame.eligible:SetChecked(true)
+    local eligibleText = T.Text(bar, "GameFontHighlightSmall", L("ELIGIBLE_ONLY"))
+    eligibleText:SetPoint("LEFT", frame.eligible, "RIGHT", 2, 0)
+    eligibleText:SetWidth(200)
+    frame.eligible:SetScript("OnClick", function(self)
         filters.specEligibleOnly = self:GetChecked() and true or false
-        RebuildFilteredResults()
+        for _, update in ipairs(dropdownUpdates) do update() end
+        FiltersChanged()
     end)
-
-    local function UpdateSpecDropdownText()
-        local count = CountSelected(filters.specIds)
-        if count == 0 then
-            specDropdown.Text:SetText(Where2GoLocale.L("SPEC_DROPDOWN_ALL"))
-        else
-            specDropdown.Text:SetText(NSelectedText(count))
-        end
-    end
-
-    specDropdown:SetupMenu(function(_owner, rootDescription)
-        for _, spec in ipairs(GetAvailableSpecs()) do
-            rootDescription:CreateCheckbox(spec.specName,
-                function() return filters.specIds[spec.specId] == true end,
-                function()
-                    if filters.specIds[spec.specId] == true then
-                        filters.specIds[spec.specId] = nil
-                    else
-                        filters.specIds[spec.specId] = true
-                    end
-                    UpdateSpecDropdownText()
-                    RebuildFilteredResults()
-                end)
-        end
+    frame.specDropdown:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L("BROWSER_SPEC_HINT"))
+        GameTooltip:Show()
     end)
-    UpdateSpecDropdownText()
-
-    -- Search box: label + box share the row with Spec/Eligible, box
-    -- stretches to the window's right edge instead of a narrow fixed box.
-    local searchLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    searchLabel:SetPoint("LEFT", eligibleLabel, "RIGHT", 16, 0)
-    searchLabel:SetText(Where2GoLocale.L("SEARCH_PLACEHOLDER"))
-
-    local searchBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-    searchBox:SetHeight(20)
-    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 6, 0)
-    searchBox:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
-    searchBox:SetAutoFocus(false)
-    searchBox:SetScript("OnTextChanged", function(self)
-        filters.searchText = self:GetText()
-        RebuildFilteredResults()
+    frame.specDropdown:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local searchLabel = T.Text(bar, "GameFontHighlightSmall", L("SEARCH_LABEL"))
+    searchLabel:SetPoint("TOPLEFT", 464, -51)
+    frame.search = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
+    frame.search:SetPoint("TOPLEFT", 565, -47)
+    frame.search:SetSize(347, 24)
+    frame.search:SetAutoFocus(false)
+    frame.search:SetScript("OnTextChanged", function(self)
+        filters.searchText = self:GetText(); FiltersChanged()
     end)
+    frame.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+end
 
-    -- Three-column list area: Results | Staged | Preferred. Each column
-    -- gets its own bordered/backgrounded header bar and list box (mockup's
-    -- boxed columns) instead of a bare FontString + unbordered frame.
-    local function CreateColumnHeader(anchorTo, anchorPoint, xOfs, yOfs, width, text)
-        local headerFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-        headerFrame:SetPoint("TOPLEFT", anchorTo, anchorPoint, xOfs, yOfs)
-        headerFrame:SetSize(width, 20)
-        headerFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
-        headerFrame:SetBackdropColor(unpack(COLORS.headerBg))
-        local headerText = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        headerText:SetPoint("LEFT", 6, 0)
-        headerText:SetTextColor(unpack(COLORS.mutedTan))
-        headerText:SetText(text)
-        return headerFrame
-    end
-
-    local resultsHeader = CreateColumnHeader(specDropdown, "BOTTOMLEFT", 0, -14, RESULTS_WIDTH, Where2GoLocale.L("RESULTS_HEADER"))
-    local stagedHeader = CreateColumnHeader(resultsHeader, "TOPLEFT", RESULTS_WIDTH + 8, 0, STAGED_WIDTH, Where2GoLocale.L("STAGED_HEADER"))
-    local preferredHeader = CreateColumnHeader(stagedHeader, "TOPLEFT", STAGED_WIDTH + 8, 0, PREFERRED_WIDTH, Where2GoLocale.L("PREFERRED_HEADER"))
-
-    local listHeight = VISIBLE_ROWS * ROW_HEIGHT
-
-    local resultsFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    resultsFrame:SetPoint("TOPLEFT", resultsHeader, "BOTTOMLEFT", 0, -4)
-    resultsFrame:SetSize(RESULTS_WIDTH, listHeight)
-    resultsFrame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    resultsFrame:SetBackdropColor(unpack(COLORS.panelBg))
-    resultsFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
-    resultsFrame:EnableMouseWheel(true)
-    resultsFrame:SetScript("OnMouseWheel", function(self, delta)
-        scrollOffset = scrollOffset - delta
-        ClampScrollOffset()
-        RefreshVisibleRows()
+local function BuildLists()
+    frame.resultTitle = T.Text(frame, "GameFontHighlight", "")
+    frame.resultTitle:SetPoint("TOPLEFT", 16, -194)
+    frame.preferredTitle = T.Text(frame, "GameFontHighlight", "")
+    frame.preferredTitle:SetPoint("TOPLEFT", 600, -194)
+    frame.selectAll = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    frame.selectAll:SetSize(24, 24)
+    frame.selectAll:SetPoint("TOPLEFT", 404, -188)
+    frame.selectAll.partial = T.Text(frame.selectAll, "GameFontHighlight", "−")
+    frame.selectAll.partial:SetPoint("CENTER", 0, 0)
+    frame.selectAll.partial:Hide()
+    local allText = T.Text(frame, "GameFontHighlightSmall", L("SELECT_RESULTS"))
+    allText:SetPoint("LEFT", frame.selectAll, "RIGHT", 2, 0)
+    frame.selectAll:SetScript("OnClick", function()
+        local n, total = selection:GetCounts()
+        selection:SelectAll(n ~= total); RefreshRows(); UpdateActions()
     end)
-
-    for i = 1, VISIBLE_ROWS do
-        local row = CreateFrame("Frame", nil, resultsFrame)
-        row:SetHeight(ROW_HEIGHT)
-        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
-        row:SetPoint("RIGHT", resultsFrame, "RIGHT", 0, 0)
-
-        local checkbox = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-        checkbox:SetSize(20, 20)
-        checkbox:SetPoint("LEFT", 0, 0)
-        checkbox:SetScript("OnClick", function(self)
-            local r = self:GetParent()
-            if r.entry then
-                if self:GetChecked() then
-                    stagedSelection[r.entry.itemId] = r.bonusId
-                else
-                    stagedSelection[r.entry.itemId] = nil
-                end
-                RefreshStagedRows()
-            end
+    frame.selectAll:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(L("SELECTION_HINT")); GameTooltip:Show()
+    end)
+    frame.selectAll:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    local list = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    list:SetPoint("TOPLEFT", 16, -218)
+    list:SetSize(RESULT_WIDTH, ROW_HEIGHT * ROWS + 12)
+    T.Box(list, "inset")
+    frame.resultList = list
+    frame.resultEmpty = EmptyLabel(list, RESULT_WIDTH, "")
+    frame.resultScroll = MakeScrollbar(list, ROW_HEIGHT * ROWS, function(value)
+        local offset = Clamp(value, #results)
+        if resultOffset ~= offset then resultOffset = offset; RefreshRows() end
+    end)
+    list:EnableMouseWheel(true)
+    list:SetScript("OnMouseWheel", function(_, delta)
+        resultOffset = Clamp(resultOffset - delta * 3, #results); RefreshRows()
+    end)
+    for i = 1, ROWS do
+        local row = CreateFrame("Frame", nil, list)
+        row:SetSize(RESULT_WIDTH - 26, ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", 6, -6 - (i - 1) * ROW_HEIGHT)
+        row.selectedBg = row:CreateTexture(nil, "BACKGROUND")
+        row.selectedBg:SetAllPoints()
+        row.selectedBg:SetColorTexture(unpack(T.colors.selected))
+        row.selectedBg:Hide()
+        row.checkbox = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        row.checkbox:SetSize(24, 24)
+        row.checkbox:SetPoint("LEFT", 0, 0)
+        row.checkbox:SetScript("OnClick", function()
+            if row.entry then selection:Toggle(row.entry.itemId); RefreshRows(); UpdateActions() end
         end)
-
-        Where2GoItemRow.CreateWidgets(row, ICON_SIZE, 24)
-        row.name:SetWidth(RESULTS_WIDTH - 24 - ICON_SIZE - 8)
-        row.summary:SetWidth(RESULTS_WIDTH - 24 - ICON_SIZE - 8)
-
-        row.checkbox = checkbox
+        Where2GoItemRow.CreateWidgets(row, 28, 28)
+        row.name:SetFontObject("GameFontHighlight")
+        row.name:SetWidth(RESULT_WIDTH - 158)
+        row.summary:SetWidth(RESULT_WIDTH - 158)
+        row.add = T.Button(row, L("ADD_ONE"), 64, 24, function()
+            if row.entry then Add({ [row.entry.itemId] = row.entry.bonusId or true }) end
+        end)
+        row.add:SetPoint("RIGHT", -2, 0)
         resultRows[i] = row
     end
-
-    local function CreateSideListRow(parent, width, onRemove)
-        local row = CreateFrame("Frame", nil, parent)
-        row:SetHeight(ROW_HEIGHT)
-
-        local removeButton = CreateFrame("Button", nil, row, "UIPanelCloseButton")
-        removeButton:SetSize(16, 16)
-        removeButton:SetPoint("RIGHT", 0, 0)
-        removeButton:SetScript("OnClick", function()
-            if row.itemId then
-                onRemove(row.itemId)
-            end
-        end)
-
-        Where2GoItemRow.CreateWidgets(row, ICON_SIZE, 0)
-        row.name:SetWidth(width - ICON_SIZE - 16 - 8)
-        row.summary:SetWidth(width - ICON_SIZE - 16 - 8)
-        return row
-    end
-
-    local stagedFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    stagedFrame:SetPoint("TOPLEFT", stagedHeader, "BOTTOMLEFT", 0, -4)
-    stagedFrame:SetSize(STAGED_WIDTH, listHeight)
-    stagedFrame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    stagedFrame:SetBackdropColor(unpack(COLORS.panelBg))
-    stagedFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
-    stagedFrame:EnableMouseWheel(true)
-    stagedFrame:SetScript("OnMouseWheel", function(self, delta)
-        stagedScrollOffset = stagedScrollOffset - delta
-        RefreshStagedRows()
+    local savedList = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    savedList:SetPoint("TOPLEFT", 600, -218)
+    savedList:SetSize(PREFERRED_WIDTH, ROW_HEIGHT * ROWS + 12)
+    T.Box(savedList, "inset")
+    frame.preferredList = savedList
+    frame.preferredEmpty = EmptyLabel(savedList, PREFERRED_WIDTH, L("EMPTY_PREFERRED"))
+    frame.preferredScroll = MakeScrollbar(savedList, ROW_HEIGHT * ROWS, function(value)
+        local offset = Clamp(value, #preferredIds)
+        if preferredOffset ~= offset then preferredOffset = offset; RefreshRows() end
     end)
-    for i = 1, STAGED_VISIBLE_ROWS do
-        local row = CreateSideListRow(stagedFrame, STAGED_WIDTH, function(itemId)
-            stagedSelection[itemId] = nil
-            RefreshStagedRows()
-            RefreshVisibleRows()
-        end)
-        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
-        row:SetPoint("RIGHT", stagedFrame, "RIGHT", 0, 0)
-        stagedRows[i] = row
-    end
-
-    local preferredFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    preferredFrame:SetPoint("TOPLEFT", preferredHeader, "BOTTOMLEFT", 0, -4)
-    preferredFrame:SetSize(PREFERRED_WIDTH, listHeight)
-    preferredFrame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    preferredFrame:SetBackdropColor(unpack(COLORS.panelBg))
-    preferredFrame:SetBackdropBorderColor(unpack(COLORS.toolbarBorder))
-    preferredFrame:EnableMouseWheel(true)
-    preferredFrame:SetScript("OnMouseWheel", function(self, delta)
-        preferredScrollOffset = preferredScrollOffset - delta
-        RefreshPreferredRows()
+    savedList:EnableMouseWheel(true)
+    savedList:SetScript("OnMouseWheel", function(_, delta)
+        preferredOffset = Clamp(preferredOffset - delta * 3, #preferredIds); RefreshRows()
     end)
-    for i = 1, PREFERRED_VISIBLE_ROWS do
-        local row = CreateSideListRow(preferredFrame, PREFERRED_WIDTH, function(itemId)
-            Where2GoCharDB.preferredItems[currentMode][itemId] = nil
-            Where2GoCharDB.preferredItemSources[currentMode][itemId] = nil
-            RefreshPreferredRows()
+    for i = 1, ROWS do
+        local row = CreateFrame("Frame", nil, savedList)
+        row:SetSize(PREFERRED_WIDTH - 26, ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", 6, -6 - (i - 1) * ROW_HEIGHT)
+        Where2GoItemRow.CreateWidgets(row, 28, 2)
+        row.name:SetFontObject("GameFontHighlight")
+        row.name:SetWidth(PREFERRED_WIDTH - 92)
+        row.summary:SetWidth(PREFERRED_WIDTH - 92)
+        row.remove = T.Button(row, "×", 22, 24, function() if row.itemId then Remove(row.itemId) end end)
+        row.remove:SetPoint("RIGHT", -2, 0)
+        row.remove:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L("REMOVE_ONE")); GameTooltip:Show()
         end)
-        row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
-        row:SetPoint("RIGHT", preferredFrame, "RIGHT", 0, 0)
+        row.remove:HookScript("OnLeave", function() GameTooltip:Hide() end)
         preferredRows[i] = row
     end
+end
 
-    local selectAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    selectAllButton:SetSize(140, 22)
-    selectAllButton:SetPoint("TOPLEFT", resultsFrame, "BOTTOMLEFT", 0, -12)
-    selectAllButton:SetText(Where2GoLocale.L("SELECT_ALL_FILTERED"))
-    selectAllButton:SetScript("OnClick", function()
-        for _, entry in ipairs(filteredResults) do
-            local _, bonusId = GetEntryIlvl(entry)
-            stagedSelection[entry.itemId] = bonusId
-        end
-        RefreshStagedRows()
-        RefreshVisibleRows()
+local function CreateBrowser()
+    frame = CreateFrame("Frame", "Where2GoBrowser", UIParent, "BackdropTemplate")
+    frame:SetSize(960, 718)
+    frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    T.Box(frame)
+    table.insert(UISpecialFrames, "Where2GoBrowser")
+    local titleBar = CreateFrame("Frame", nil, frame)
+    titleBar:SetPoint("TOPLEFT", 0, 0)
+    titleBar:SetPoint("TOPRIGHT", -40, 0)
+    titleBar:SetHeight(60)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function() frame:StartMoving() end)
+    titleBar:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
+    local title = T.Text(titleBar, "GameFontNormalLarge", L("BROWSER_TITLE"))
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetTextColor(unpack(T.colors.accent))
+    local subtitle = T.Text(titleBar, "GameFontHighlightSmall", L("BROWSER_SUBTITLE"))
+    subtitle:SetPoint("TOPLEFT", 16, -42)
+    subtitle:SetTextColor(unpack(T.colors.muted))
+    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -4, -4)
+    close:SetScript("OnClick", function() frame:Hide() end)
+    frame.modeButtons = {}
+    for i, mode in ipairs({ "DROP", "VOIDCORE" }) do
+        local button = T.Button(frame, L("MODE_" .. mode), 112, 28, function() SetMode(mode) end)
+        button:SetPoint("TOPLEFT", 16 + (i - 1) * 120, -64)
+        frame.modeButtons[mode] = button
+    end
+    BuildFilters()
+    BuildLists()
+    frame.selectionCount = T.Text(frame, "GameFontHighlightSmall", "")
+    frame.selectionCount:SetPoint("TOPLEFT", 16, -646)
+    frame.selectionCount:SetWidth(232)
+    frame.clearSelection = T.Button(frame, L("CLEAR_SELECTION"), 104, 28, function()
+        selection:SelectAll(false); RefreshRows(); UpdateActions()
     end)
-
-    local addSelectedButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    addSelectedButton:SetSize(140, 22)
-    addSelectedButton:SetPoint("TOPLEFT", stagedFrame, "BOTTOMLEFT", 0, -12)
-    addSelectedButton:SetText(Where2GoLocale.L("ADD_SELECTED"))
-    addSelectedButton:SetScript("OnClick", function()
-        for itemId, bonusId in pairs(stagedSelection) do
-            Where2GoCharDB.preferredItems[currentMode][itemId] = true
-            Where2GoCharDB.preferredItemSources[currentMode][itemId] = bonusId
-        end
-        stagedSelection = {}
-        RebuildFilteredResults()
-        RefreshPreferredRows()
+    frame.clearSelection:SetPoint("TOPLEFT", 264, -636)
+    frame.addSelected = T.Button(frame, "", 200, 28, function() Add(selection:GetSelected()) end)
+    frame.addSelected:SetPoint("TOPLEFT", 384, -636)
+    frame.addSelected:GetFontString():SetTextColor(unpack(T.colors.accent))
+    frame.clearPreferred = T.Button(frame, L("CLEAR_ALL"), 100, 28, function()
+        StaticPopup_Show("WHERE2GO_CLEAR_PREFERRED", nil, nil, currentMode)
     end)
-
-    local clearSelectionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    clearSelectionButton:SetSize(140, 22)
-    clearSelectionButton:SetPoint("TOPLEFT", addSelectedButton, "BOTTOMLEFT", 0, -6)
-    clearSelectionButton:SetText(Where2GoLocale.L("CLEAR_SELECTION"))
-    clearSelectionButton:SetScript("OnClick", function()
-        stagedSelection = {}
-        RefreshStagedRows()
-        RefreshVisibleRows()
+    frame.clearPreferred:SetPoint("TOPLEFT", 844, -636)
+    frame.feedback = T.Text(frame, "GameFontHighlightSmall", "")
+    frame.feedback:SetPoint("TOPLEFT", 16, -685)
+    frame.feedback:SetWidth(806)
+    frame.feedback:SetTextColor(unpack(T.colors.muted))
+    frame.undo = T.Button(frame, L("UNDO"), 100, 26, function()
+        if Where2GoPreferences.Undo(currentMode) > 0 then Feedback("UNDONE_FEEDBACK") end
     end)
-
-    local clearAllButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    clearAllButton:SetSize(140, 22)
-    clearAllButton:SetPoint("TOPLEFT", preferredFrame, "BOTTOMLEFT", 0, -12)
-    clearAllButton:SetText(Where2GoLocale.L("CLEAR_ALL"))
-    clearAllButton:SetScript("OnClick", function()
-        StaticPopup_Show("WHERE2GO_CLEAR_PREFERRED")
-    end)
-
-    frame.searchBox = searchBox
-    SetMode("DROP")
+    frame.undo:SetPoint("TOPRIGHT", -16, -676)
     frame:Hide()
-    return frame
+    SetMode(currentMode)
 end
 
 StaticPopupDialogs["WHERE2GO_CLEAR_PREFERRED"] = {
-    text = Where2GoLocale.L("CLEAR_PREFERRED_CONFIRM"),
-    button1 = Where2GoLocale.L("CLEAR_BUTTON"),
-    button2 = Where2GoLocale.L("CANCEL_BUTTON"),
-    OnAccept = function()
-        Where2GoCharDB.preferredItems[currentMode] = {}
-        Where2GoCharDB.preferredItemSources[currentMode] = {}
-        RebuildFilteredResults()
-        RefreshPreferredRows()
+    text = L("CLEAR_PREFERRED_CONFIRM"),
+    button1 = L("CLEAR_BUTTON"), button2 = L("CANCEL_BUTTON"),
+    OnAccept = function(self, data)
+        local mode = data or self.data
+        if mode ~= "DROP" and mode ~= "VOIDCORE" then return end
+        local count = Where2GoPreferences.Clear(mode)
+        if frame and currentMode == mode and count > 0 then Feedback("REMOVED_FEEDBACK", count) end
     end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
 }
 
-Where2GoBrowserPanel = {}
+function Where2GoBrowserPanel.Show(mode)
+    if not frame then
+        selection = Where2GoSelection.New()
+        pool = Where2GoItemBrowser.BuildItemPool()
+        CreateBrowser()
+        for _, entry in ipairs(pool) do
+            if not pendingItems[entry.itemId] and not C_Item.GetItemInfo(entry.itemId) then
+                pendingItems[entry.itemId] = true
+                C_Item.RequestLoadItemDataByID(entry.itemId)
+            end
+        end
+    end
+    if mode then SetMode(mode) end
+    Refresh(false)
+    frame:Show()
+end
 
 function Where2GoBrowserPanel.Toggle()
-    if not browserFrame then
-        browserFrame = CreateBrowserPanel()
-        itemPool = Where2GoItemBrowser.BuildItemPool()
-        for _, entry in ipairs(itemPool) do
-            C_Item.RequestLoadItemDataByID(entry.itemId)
-        end
-        local itemLoadWatcher = CreateFrame("Frame")
-        itemLoadWatcher:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-        itemLoadWatcher:SetScript("OnEvent", function()
-            if browserFrame and browserFrame:IsShown() then
-                RebuildFilteredResults()
-            end
-        end)
-        RebuildFilteredResults()
-    end
-    if browserFrame:IsShown() then
-        browserFrame:Hide()
-    else
-        RebuildFilteredResults()
-        RefreshPreferredRows()
-        browserFrame:Show()
-    end
+    if frame and frame:IsShown() then frame:Hide()
+    else Where2GoBrowserPanel.Show() end
 end
+
+Where2GoPreferences.Subscribe("browser", function()
+    if frame then Refresh(false) end
+end)
+
+local watcher = CreateFrame("Frame")
+watcher:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+watcher:SetScript("OnEvent", function(_, _, itemId)
+    if pendingItems[itemId] then
+        pendingItems[itemId] = nil
+        if frame and frame:IsShown() then Refresh(false) end
+    end
+end)
