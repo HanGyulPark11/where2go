@@ -2,3 +2,4 @@
 tools/data-prep/scratch/
 __pycache__/
 dist/
+.claude/settings.local.json

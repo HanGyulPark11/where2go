@@ -186,7 +186,13 @@ end
 local function CreatePanel()
     local frame = CreateFrame("Frame", "Where2GoPanel", UIParent, "BackdropTemplate")
     frame:SetSize(380, 500)
-    frame:SetPoint("CENTER")
+    -- Anchored at TOP, not CENTER -- the panel's height changes as the
+    -- player expands/collapses per-dungeon/boss cards (see SetHeight
+    -- calls below), and a CENTER anchor keeps the frame's center fixed,
+    -- so both the top AND bottom edges shift when height changes. TOP
+    -- keeps the top edge fixed instead, so collapsing content only
+    -- moves the bottom edge upward.
+    frame:SetPoint("TOP", UIParent, "TOP", 0, -120)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")

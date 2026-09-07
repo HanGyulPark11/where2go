@@ -75,6 +75,24 @@ end
 
 function Where2GoDirectDrop.IsEligibleForSpec(specId)
     return function(itemId)
+        -- Gate on basic equippability first, before either branch below --
+        -- Core/SpecEligibilityData.lua's BY_SPEC is built from Blizzard's
+        -- own Encounter Journal loot filter, which doesn't distinguish
+        -- equippable gear from cosmetic loot (mounts, toys, etc.) the
+        -- way C_Item.IsEquippableItem does, so a non-gear item that
+        -- slipped into Sources.lua would otherwise pass the BY_SPEC fast
+        -- path below unfiltered -- unlike Core/ItemBrowser.lua's
+        -- matchesFilters, which already excludes non-gear items via its
+        -- own equip-slot lookup. This also disambiguates GetItemSpecInfo
+        -- returning empty in the fallback branch below, between "no
+        -- restriction" (universal items like necklaces) and "not
+        -- applicable, this class can't equip this item type at all"
+        -- (e.g. a bow for a non-Hunter) -- IsEquippableItem answers that
+        -- directly from the live client, no static data needed.
+        if C_Item.IsEquippableItem(itemId) == false then
+            return false
+        end
+
         -- Prefer the committed, precomputed data (Core/SpecEligibilityData.lua,
         -- generated via Core/SpecEligibilityScan.lua's Encounter Journal
         -- loot-filter scan and hand-merged in -- see
@@ -88,16 +106,6 @@ function Where2GoDirectDrop.IsEligibleForSpec(specId)
             return bySpec[itemId] == true
         end
 
-        -- Gate on basic class/weapon-type equippability first:
-        -- GetItemSpecInfo returning empty is ambiguous between "no
-        -- restriction" (universal items like necklaces) and "not
-        -- applicable, this class can't equip this item type at all"
-        -- (e.g. a bow for a non-Hunter) -- IsEquippableItem disambiguates
-        -- the second case directly from the live client, no static data
-        -- needed.
-        if C_Item.IsEquippableItem(itemId) == false then
-            return false
-        end
         local specTable = C_Item.GetItemSpecInfo(itemId)
         -- C_Item.GetItemSpecInfo returning nil is ambiguous between "no
         -- spec restriction" and "not yet cached by the client" -- on a
