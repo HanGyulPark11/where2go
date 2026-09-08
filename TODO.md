@@ -1,3 +1,11 @@
+# Historical delivery record and open live QA
+
+This file retains prior discovery and delivery notes. Use
+`docs/CURRENT_STATE.md` for current status and `docs/CODEMAP.md` for source and
+test routing. The open live work is `docs/UI_REDESIGN_QA.md` and real Voidcore
+`BONUS_ROLL_RESULT` confirmation. Historical statements below do not supersede
+current source or tests.
+
 # Restart Checklist
 
 - [x] Confirm the first supported WoW client version and season. Midnight

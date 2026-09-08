@@ -1,0 +1,6 @@
+# Project-local defaults. Native activation from this directory is unverified.
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
+
+[agents]
+max_concurrent_threads_per_session = 2

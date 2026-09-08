@@ -25,13 +25,13 @@
 ## Task 1: Navigation and policy
 
 **Owner:** Terra documentation worker.
-**Files:** AGENTS.md, CLAUDE.md, docs/CODEMAP.md, docs/CURRENT_STATE.md, docs/HARNESS.md, docs/modules/*.md, README.md, TODO.md, tools/LINT_README.md, .codex/config.toml, .codex/agents/*.toml.
+**Files:** AGENTS.md, CLAUDE.md, docs/CODEMAP.md, docs/CURRENT_STATE.md, docs/harness/workflow.md, docs/modules/*.md, README.md, TODO.md, tools/LINT_README.md, .codex/config.toml, .codex/agents/*.toml, tests/docs_spec.lua, tests/run_tests.lua.
 
-- [ ] Inspect current module entry points and tests; create a concise functional map and only useful module contracts.
-- [ ] Separate current status from historical TODO descriptions, preserving historical findings and open live QA.
-- [ ] Define project-local routing and explicit plugin overrides; document native configuration activation as unverified until checked.
-- [ ] Describe vault topic lookup, end-of-session documentation audit, usage measurement and Claude limitations.
-- [ ] Validate links and consistency against actual symbols and test coverage; return evidence and remaining limitations.
+- [x] Inspect current module entry points and tests; create a concise functional map and only useful module contracts.
+- [x] Separate current status from historical TODO descriptions, preserving historical findings and open live QA.
+- [x] Define project-local routing and explicit plugin overrides; document native configuration activation as unverified until checked.
+- [x] Describe vault topic lookup, end-of-session documentation audit, usage measurement and Claude limitations.
+- [x] Validate links and consistency against actual symbols and test coverage; return evidence and remaining limitations.
 
 ## Task 2: Executable workflow
 
@@ -39,11 +39,11 @@
 **Files:** tools/harness/*, tests/harness/*, .gitignore (only harness scratch entries).
 **Interface:** Task 1 documents the actual commands produced by Task 2 after integration. Scripts must have comment-based help and an executable usage example.
 
-- [ ] Build a small Claude review adapter: configurable executable/model, explicit read-only tools, fresh invocation, bounded prompt input, JSON output, exit/error/schema validation, timeout, no permission bypass. Keep raw artifacts in ignored task scratch.
-- [ ] Build a completion gate with explicit file selection and content fingerprints, baseline HEAD, independent review and documentation attestations, applicable automatic checks and user-QA status. Missing, failed, stale, or pending evidence must block commits. Attestations are auditable workflow records, not proof of review quality.
-- [ ] Default to verification; expose an explicit commit action after gate checks. Reject unrelated staged files, changed baseline/content, protected branches and unsafe paths. Stage only selected paths; handle additions and deletions. Keep evidence outside the selected commit set to avoid self-reference.
-- [ ] Add meaningful isolated tests using temporary Git repositories and fake Claude executables/results: success, failed review, malformed result, stale evidence, pending QA, unrelated staging, command failure, and safe explicit staging.
-- [ ] Run tooling tests and existing Lua/lint baseline; report exact commands and results. No commits.
+- [x] Build a small Claude review adapter: configurable executable/model, explicit read-only tools, fresh invocation, bounded prompt input, JSON output, exit/error/schema validation, timeout, no permission bypass. Keep raw artifacts in ignored task scratch.
+- [x] Build a completion gate with explicit file selection and content fingerprints, baseline HEAD, independent review and documentation attestations, applicable automatic checks and user-QA status. Missing, failed, stale, or pending evidence must block commits. Attestations are auditable workflow records, not proof of review quality.
+- [x] Default to verification; expose an explicit commit action after gate checks. Reject unrelated staged files, changed baseline/content, protected branches and unsafe paths. Stage only selected paths; handle additions and deletions. Keep evidence outside the selected commit set to avoid self-reference.
+- [x] Add meaningful isolated tests using temporary Git repositories and fake Claude executables/results: success, failed review, malformed result, stale evidence, pending QA, unrelated staging, command failure, and safe explicit staging.
+- [x] Run tooling tests and existing Lua/lint baseline; report exact commands and results. No commits.
 
 ## Task 3: Integration, independent review and completion
 
@@ -63,6 +63,7 @@
 | 1 | Current documentation vs historical claims | Current code/tests win; retain explicitly unverified live behavior. |
 | 2 | Mutable evidence vs commit fingerprint | Evidence lives outside selected paths and binds baseline plus all selected file contents. |
 | 3 | Review vs subsequent edits | Source/tool changes invalidate evidence; rerun affected checks and review before commit. |
+| 1 and 2 | User-provided AGENTS behavior contract vs new implementation | Preserve different-model review and changed/deleted WoW-API live-QA requirements. Document actual script names and manifest interface rather than pretend the example gate.ps1 already exists. |
 
 ## Progress
 
@@ -71,3 +72,11 @@
 - Resume audit (2026-09-08): switched from the user's parallel Claude branch to this branch. HEAD remains `a83e678`, with zero commits ahead of master. Only this untracked plan exists; Tasks 1-3 have not been implemented and navigation documents do not exist. The two earlier workers stopped on usage limits without producing files.
 - The previous Progress entries were accurate but incomplete: branch creation and design approval did not imply implementation. The user explicitly requested an initial plan-only commit before implementation; this is the sole exception to the final review-before-commit policy.
 - Do not inspect, modify, switch to, merge, or push the parallel `chore/repo-agent-harness-claude` branch. All workers must stay on this branch and must stop if its identity changes.
+- Baseline verification: Lua 5.1 suite passed 18 specs; luacheck passed all 23 addon files with zero warnings/errors.
+- Claude Sonnet smoke request returned exit 1 and `is_error: true` because account extra usage was exhausted. No model inference occurred. Use independent Sol review for this delivery; retain Claude adapter tests and record successful live review as unverified.
+- Vault audit corrected the existing Windows addon tooling page's overly broad claim that WoW UI is only manually testable. Raw evidence: `raw/2026-09-08-wow-frame-double-validation.md`; index updated. No new wiki page was created.
+
+- Implementation completed by Terra with Sol fixes: navigation, module contracts, agent definitions, state-bound review/commit tooling and regression tests. Exact fresh-process harness runner passed 20 tests after correcting a missing-baseline-map PowerShell 5 error; Lua passed 19 specs and lint passed 23 files. No addon source changed; live QA is not required for this delivery.
+- Finalization protocol: the remaining Task 3 gate operations run against this frozen snapshot. Their state-bound review and execution evidence are stored in ignored .harness/final-review; the resulting commit is recorded in Git history. The initial Sol reviews requested changes and were followed by fixes; the GPT-5.5 CLI review subsequently ended on a usage limit without a verdict. Claude Sonnet 4.6 then performed a real independent review after quota recovery; a scoped re-review is the final gate because Sol also implemented fixes.
+
+- Review adjudication (2026-09-08): Claude reported that --tools was unsupported, but installed CLI help and its own successful 24-turn invocation establish support; retain both read-only tool flags. Its empty-Checks feedback was accepted. A real enclosing JSON code fence exposed strict-parser handling; one complete optional fence is now supported with malformed-output rejection. The authoritative suite passes 23 cases after these corrections.

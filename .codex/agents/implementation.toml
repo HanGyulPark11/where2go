@@ -1,0 +1,7 @@
+# Policy artifact; native project-local agent loading is unverified.
+name = "implementation"
+description = "Scoped lower-model implementation worker for Where2Go."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+developer_instructions = "Read AGENTS.md, docs/CURRENT_STATE.md, and docs/CODEMAP.md. Implement only assigned scope, run applicable checks, do not commit, and request review from a different model."

@@ -1,12 +1,16 @@
 # Where2Go lint tooling
 
+Run `C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe tests/run_tests.lua`
+from the repository root for the registered Lua suite. Automated lint/tests do
+not replace required live WoW QA for changed or deleted API, event, or
+SavedVariables behavior.
+
 `tools/lint.ps1` runs [luacheck](https://github.com/lunarmodules/luacheck)
 against every `.lua` file under `Where2Go/`, catching both syntax errors
-and common Lua mistakes (unused variables, accidental global writes) --
-including the 5 WoW-API-dependent files (`Init.lua`, `DirectDrop.lua`,
-`Equipment.lua`, `VoidcoreDrop.lua`, `Panel.lua`) that no unit test
-currently touches, since today a syntax error in any of them is only
-found via a live `/reload` in-game.
+and common Lua mistakes (unused variables, accidental global writes). This
+includes WoW-API-dependent modules, whether they have frame-double, pure-helper,
+integration, syntax-only, or no registered test coverage. Those automated checks
+still cannot establish real-client API, event, layout, or SavedVariables behavior.
 
 ## One-time setup
 

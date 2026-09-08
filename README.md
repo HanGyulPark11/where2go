@@ -23,8 +23,9 @@ The ranking compares the share of preferred items in the eligible pool under
 an equal-outcome assumption. It is not a measured drop rate or time-per-run
 estimate and does not automatically exclude items based on equipped gear.
 
-See [UI verification](docs/UI_REDESIGN_QA.md) for the redesign's automated
-coverage, live-client checks and current limitations.
+See [current state](docs/CURRENT_STATE.md) for verified status and open live
+work, [code map](docs/CODEMAP.md) for source/test navigation, and [UI
+verification](docs/UI_REDESIGN_QA.md) for the two-window UI checklist.
 
 ## Product goal
 
@@ -40,6 +41,7 @@ Development references:
 - `docs/SEASON_CHECKLIST.md` for the season-changeover procedure.
 - `tools/LINT_README.md` for the Lua syntax/lint checking setup.
 - `docs/RELEASE_CHECKLIST.md` for the packaging/release procedure.
+- `AGENTS.md` for repository workflow and completion evidence.
 
 ## Repository language
 
