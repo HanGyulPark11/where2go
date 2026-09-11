@@ -35,6 +35,7 @@ end
 
 local function EntryLevel(entry)
     if entry.kind == "dungeon" then return Where2GoRaidRanks.GetMythicPlusIlvl() end
+    if currentMode == "VOIDCORE" then return Where2GoRaidRanks.GetVoidcoreRaidIlvl(entry.bossId) end
     return Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
 end
 
@@ -83,7 +84,8 @@ RefreshRows = function()
         row:SetShown(entry ~= nil)
         if entry then
             local source = entry.raidName and (entry.raidName .. " - " .. entry.bossName) or entry.contentName
-            Where2GoItemRow.Populate(row, entry.itemId, entry.ilvl, source, entry.bonusId)
+            Where2GoItemRow.Populate(row, entry.itemId, entry.ilvl, source, entry.bonusId,
+                entry.trackKey, entry.trackRank)
             local saved = preferred[entry.itemId] == true
             row.checkbox:SetEnabled(not saved)
             row.checkbox:SetChecked(selected[entry.itemId] ~= nil)
@@ -96,7 +98,10 @@ RefreshRows = function()
         local id = preferredIds[preferredOffset + i]
         row.itemId = id
         row:SetShown(id ~= nil)
-        if id then Where2GoItemRow.Populate(row, id, nil, nil, sources[id]) end
+        if id then
+            local ilvl, trackKey, trackRank = Where2GoItemRow.GetLevelFromBonus(sources[id])
+            Where2GoItemRow.Populate(row, id, ilvl, nil, sources[id], trackKey, trackRank)
+        end
     end
     SyncScrollbar(frame.resultScroll, #results, resultOffset)
     SyncScrollbar(frame.preferredScroll, #preferredIds, preferredOffset)
@@ -120,8 +125,8 @@ Refresh = function(resetSelection)
     for _, entry in ipairs(filtered) do
         if not seen[entry.itemId] then
             seen[entry.itemId] = true
-            local ilvl, _, _, bonusId = EntryLevel(entry)
-            entry.ilvl, entry.bonusId = ilvl, bonusId
+            local ilvl, trackKey, trackRank, bonusId = EntryLevel(entry)
+            entry.ilvl, entry.trackKey, entry.trackRank, entry.bonusId = ilvl, trackKey, trackRank, bonusId
             table.insert(results, entry)
         end
     end

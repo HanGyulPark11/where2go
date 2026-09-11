@@ -18,8 +18,7 @@ param(
     [string] $RepoPath = (Get-Location).Path,
     [string] $ScratchRoot = '.harness',
     [string] $ClaudePath = 'C:\Users\hangy\.local\bin\claude.exe',
-    [string] $Model = 'sonnet',
-    [ValidateRange(1, 600)] [int] $TimeoutSeconds = 120
+    [string] $Model = 'sonnet'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,11 +61,7 @@ try {
     [void]$process.Start()
     $stdoutTask = $process.StandardOutput.ReadToEndAsync()
     $stderrTask = $process.StandardError.ReadToEndAsync()
-    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-        & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
-        $process.WaitForExit()
-        Stop-Review "Claude timed out after $TimeoutSeconds seconds."
-    }
+    $process.WaitForExit()
     $stdout = $stdoutTask.Result
     $stderr = $stderrTask.Result
     Set-Content -NoNewline -LiteralPath $rawPath -Value $stdout

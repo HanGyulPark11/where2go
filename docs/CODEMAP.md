@@ -14,14 +14,14 @@
 | Where2Go/Core/ItemBrowser.lua | pure | Pool filtering and sorting. | itembrowser_spec.lua |
 | Where2Go/Core/Selection.lua | pure | Staged-item selection. | selection_spec.lua |
 | Where2Go/Core/Preferences.lua | pure | Preferred lists, undo, subscribers. | preferences_spec.lua |
-| Where2Go/Core/RaidRanks.lua | data | Raid level/rank rules. | raidranks_spec.lua |
+| Where2Go/Core/RaidRanks.lua | data | Direct-drop and Voidcore raid level/rank rules. | raidranks_spec.lua, voidcoredrop_spec.lua |
 | Where2Go/Core/Ranking.lua | pure | Eligible-pool ranking. | ranking_spec.lua |
 | Where2Go/Core/DirectDrop.lua | wow-api | Direct-drop candidates and live spec. | browserpanel_spec.lua (integration) |
 | Where2Go/Core/VoidcoreHistory.lua | wow-api | Voidcore event history. | voidcorehistory_spec.lua |
-| Where2Go/Core/VoidcoreDrop.lua | wow-api | Voidcore candidates. | browserpanel_spec.lua (integration) |
+| Where2Go/Core/VoidcoreDrop.lua | wow-api | Voidcore candidates and Great Vault-equivalent raid reward metadata. | voidcoredrop_spec.lua, browserpanel_spec.lua (integration) |
 | Where2Go/Core/SpecEligibilityScan.lua | wow-api | Encounter Journal scan/export. | specEligibilityScan_spec.lua |
 | Where2Go/Core/Compare.lua | pure | Candidate comparison. | compare_spec.lua |
-| Where2Go/Core/Equipment.lua | wow-api | Equipped-item lookup. | no direct registered spec |
+| Where2Go/Core/Equipment.lua | wow-api | Equipped-item lookup, carried ownership and filtering mode. | equipment_spec.lua |
 | Where2Go/Core/Init.lua | wow-api | Addon initialization and commands. | toc_spec.lua |
 | Where2Go/UI/Theme.lua | wow-api | Shared frame helpers. | panel_spec.lua |
 | Where2Go/UI/ItemRow.lua | wow-api | Item widgets and tooltips. | panel_spec.lua |

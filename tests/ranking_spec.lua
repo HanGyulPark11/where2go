@@ -65,4 +65,13 @@ assert(order[3] == "Gamma", "3rd should be Gamma (ratio 0.5)")
 assert(order[4] == "Delta", "4th should be Delta (ratio 0, wins the name tiebreak over Epsilon)")
 assert(order[5] == "Epsilon", "5th should be Epsilon (ratio 0, loses the name tiebreak to Delta)")
 
+local sourceEntry = { id = "source", name = "Source", itemIds = { 901 }, ilvl = 315, trackKey = "HERO" }
+local receivedEntry
+Where2GoRanking.RankContent({ sourceEntry }, function() return true end, function(_, entry)
+    receivedEntry = entry
+    return false
+end)
+assert(receivedEntry == sourceEntry and receivedEntry.ilvl == 315 and receivedEntry.trackKey == "HERO",
+    "preferred filtering receives the exact content source context")
+
 print("ranking_spec: OK")

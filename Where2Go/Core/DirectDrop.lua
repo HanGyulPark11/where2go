@@ -128,8 +128,34 @@ function Where2GoDirectDrop.IsEligibleForSpec(specId)
     end
 end
 
-local function IsPreferred(itemId)
-    return Where2GoCharDB.preferredItems.DROP[itemId] == true
+-- Inventory can contain crafted or older gear absent from the season's
+-- precomputed loot table, so ownership suitability uses live item data.
+function Where2GoDirectDrop.IsOwnedUsableForSpec(specId)
+    return function(itemId)
+        if C_Item.IsEquippableItem(itemId) == false then
+            return false
+        end
+        local specTable = C_Item.GetItemSpecInfo(itemId)
+        if not specTable then
+            return false
+        end
+        if #specTable == 0 then
+            -- An empty table is ambiguous in the live API: it can mean a
+            -- universal accessory or an item type this class cannot equip.
+            -- Only the universally wearable slot families are safe here;
+            -- armor, weapons, and trinkets require explicit spec metadata.
+            local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemId)
+            return equipLoc == "INVTYPE_NECK"
+                or equipLoc == "INVTYPE_FINGER"
+                or equipLoc == "INVTYPE_CLOAK"
+        end
+        for _, id in ipairs(specTable) do
+            if id == specId then
+                return true
+            end
+        end
+        return false
+    end
 end
 
 -- Returns (results, specName) on success, or (nil, "unsupported_spec") if
@@ -141,7 +167,15 @@ function Where2GoDirectDrop.GetRankedResults()
         return nil, "unsupported_spec"
     end
     local content = Where2GoDirectDrop.BuildContentList()
-    local results = Where2GoRanking.RankContent(content, Where2GoDirectDrop.IsEligibleForSpec(specId), IsPreferred)
+    local specEligible = Where2GoDirectDrop.IsEligibleForSpec(specId)
+    local ownedUsable = Where2GoDirectDrop.IsOwnedUsableForSpec(specId)
+    local owned = Where2GoEquipment.GetOwnedSnapshot()
+    local mode = Where2GoEquipment.GetOwnershipMode()
+    local function isPreferred(itemId, entry)
+        return Where2GoCharDB.preferredItems.DROP[itemId] == true
+            and not Where2GoEquipment.HasOwnedAtLeast(owned, itemId, entry, mode, ownedUsable)
+    end
+    local results = Where2GoRanking.RankContent(content, specEligible, isPreferred)
     return results, specName
 end
 

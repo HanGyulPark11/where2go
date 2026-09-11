@@ -55,6 +55,18 @@ function Where2GoRaidRanks.GetRaidIlvl(bossId)
     return track.ilvls[rank], "MYTH", rank, track.bonusIdStart + rank - 1
 end
 
+-- Voidcore raid rewards match the equivalent Great Vault reward. Standard
+-- Mythic bosses therefore award fully upgraded Myth 6/6 gear, while the
+-- final two bosses retain their special Myth 9/6 reward.
+function Where2GoRaidRanks.GetVoidcoreRaidIlvl(bossId)
+    if Where2GoRaidRanks.MYTH_FINAL_BOSS_IDS[bossId] then
+        return Where2GoRaidRanks.MYTH_FINAL_ILVL, "MYTH", Where2GoRaidRanks.MYTH_FINAL_RANK, Where2GoRaidRanks.MYTH_FINAL_BONUS_ID
+    end
+    local track = Where2GoTracks.UPGRADE_TRACKS.MYTH
+    local rank = 6
+    return track.ilvls[rank], "MYTH", rank, track.bonusIdStart + rank - 1
+end
+
 -- Returns (ilvl, trackKey, rank, bonusId) for the fixed Mythic+ key+10
 -- assumption. See GetRaidIlvl's comment above re: trackKey/bonusId.
 function Where2GoRaidRanks.GetMythicPlusIlvl()

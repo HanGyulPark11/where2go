@@ -45,4 +45,19 @@ assert(mplusIlvl == HERO.ilvls[3], "Mythic+ ilvl should be HERO.ilvls[3]")
 assert(mplusTrackKey == "HERO", "Mythic+ track key should be HERO")
 assert(mplusBonusId == HERO.bonusIdStart + 2, "Mythic+ bonusId should be HERO's bonusIdStart + 2 (rank 3)")
 
+-- Voidcore raid rewards follow the equivalent Great Vault level rather
+-- than the direct boss-drop level. Bosses 1-6 award fully upgraded Myth
+-- gear; the final two keep their special Myth 9/6 level.
+for bossId in pairs(expectedRank) do
+    local voidIlvl, voidTrackKey, voidRank, voidBonusId = Where2GoRaidRanks.GetVoidcoreRaidIlvl(bossId)
+    assert(voidIlvl == MYTH.ilvls[6], "Voidcore bossId " .. bossId .. " should be Myth 6/6")
+    assert(voidTrackKey == "MYTH", "Voidcore raid track should be MYTH")
+    assert(voidRank == 6, "Voidcore bossId " .. bossId .. " should be rank 6")
+    assert(voidBonusId == MYTH.bonusIdStart + 5, "Voidcore Myth 6/6 should use the rank-6 bonus ID")
+end
+
+local voidFinalIlvl, voidFinalTrackKey, voidFinalRank, voidFinalBonusId = Where2GoRaidRanks.GetVoidcoreRaidIlvl(2883)
+assert(voidFinalIlvl == 344 and voidFinalTrackKey == "MYTH" and voidFinalRank == 9 and voidFinalBonusId == 13848,
+    "Voidcore final bosses should remain Myth 9/6 ilvl 344")
+
 print("raidranks_spec: OK")

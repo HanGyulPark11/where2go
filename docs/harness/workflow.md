@@ -10,6 +10,10 @@ First run a fresh read-only review. For example:
 .\tools\harness\Invoke-ClaudeReview.ps1 -PromptPath .harness\task\prompt.md -TaskId task -Files AGENTS.md,docs\CODEMAP.md -Model sonnet
 ```
 
+The runner has no internal wall-clock timeout. It waits for Claude to finish
+and still fails on a nonzero process exit, an API error response, or malformed
+review JSON. An operator may stop the parent process externally when needed.
+
 It supplies both `--tools` and `--allowedTools` with only `Read`, `Glob`, and `Grep`; the installed CLI accepts these flags, and a real invocation completed with that restriction. The adapter validates Claude's outer response and the review JSON, which may optionally be enclosed in one Markdown code fence, then writes raw and normalized results. Evidence records both the requested model and the single model reported by Claude when available; model independence uses the reported model. A failed CLI, authentication, quota, parser, or schema result is not review evidence.
 
 After review, create the state-bound manifest, then verify it:

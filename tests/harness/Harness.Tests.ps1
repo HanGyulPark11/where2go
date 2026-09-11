@@ -284,7 +284,7 @@ Describe 'Invoke-ClaudeReview' {
         Set-Content -Path $fake -Value '@echo {"result":"{\"status\":\"approved\",\"findings\":[]}","modelUsage":{"claude-sonnet-4-6":{"inputTokens":1}}}'
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake -TimeoutSeconds 10
+        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
         $LASTEXITCODE | Should Be 0
         $evidence = Get-Content -Raw (Join-Path $scratch 'test-task\review.json') | ConvertFrom-Json
         $evidence.status | Should Be 'approved'
@@ -299,7 +299,7 @@ Describe 'Invoke-ClaudeReview' {
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
         Set-Content -Path $fake -Value '@echo {"result":"not json"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake -TimeoutSeconds 10 2>$null
+        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
         ($LASTEXITCODE -ne 0) | Should Be $true
     }
 
@@ -311,7 +311,7 @@ Describe 'Invoke-ClaudeReview' {
         Set-Content -Path $fake -Value '@echo {"result":"```json\n{\"status\":\"approved\",\"findings\":[]}\n```"}'
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake -TimeoutSeconds 10
+        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
 
         $LASTEXITCODE | Should Be 0
         (Get-Content -Raw (Join-Path $scratch 'fenced-task\review.json') | ConvertFrom-Json).status | Should Be 'approved'
@@ -324,7 +324,7 @@ Describe 'Invoke-ClaudeReview' {
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
         Set-Content -Path $fake -Value '@echo {"result":"```json\nnot json\n```"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake -TimeoutSeconds 10 2>$null
+        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
 
         ($LASTEXITCODE -ne 0) | Should Be $true
         (Test-Path -LiteralPath (Join-Path $repo '.harness\fenced-task\review.json')) | Should Be $false
@@ -337,7 +337,7 @@ Describe 'Invoke-ClaudeReview' {
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
         Set-Content -Path $fake -Value '@echo {"is_error":true,"result":"{\"status\":\"approved\",\"findings\":[]}"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake -TimeoutSeconds 10 2>$null
+        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
         ($LASTEXITCODE -ne 0) | Should Be $true
     }
 
@@ -348,19 +348,12 @@ Describe 'Invoke-ClaudeReview' {
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
         Set-Content -Path $fake -Value '@exit /b 7'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake -TimeoutSeconds 10 2>$null
+        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
         ($LASTEXITCODE -ne 0) | Should Be $true
     }
 
-    It 'times out a Claude process that produces no completed response' {
-        $repo = New-HarnessRepository
-        $prompt = Join-Path $repo 'prompt.txt'
-        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
-        $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@ping -n 5 127.0.0.1 >nul'
-
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake -TimeoutSeconds 1 2>$null
-        ($LASTEXITCODE -ne 0) | Should Be $true
+    It 'has no internal Claude review timeout parameter' {
+        (Get-Command $reviewScript).Parameters.ContainsKey('TimeoutSeconds') | Should Be $false
     }
 
     It 'carries an actual deletion through review, manifest, and commit' {
@@ -372,7 +365,7 @@ Describe 'Invoke-ClaudeReview' {
         Remove-Item (Join-Path $repo 'selected.txt')
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId delete-pipeline -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake -TimeoutSeconds 10
+        & $reviewScript -PromptPath $prompt -TaskId delete-pipeline -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
         $reviewPath = Join-Path $scratch 'delete-pipeline\review.json'
         $manifestPath = Join-Path $scratch 'delete-pipeline\completion.json'
         & $manifestScript -TaskId delete-pipeline -Files selected.txt -ImplementationModel terra -ReviewEvidencePath $reviewPath -DocumentationBy docs-owner -Checks git-head -OutputPath $manifestPath -RepoPath $repo

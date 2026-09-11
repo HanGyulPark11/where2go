@@ -18,7 +18,7 @@ function Where2GoRanking.RankContent(content, isEligible, isPreferred)
                 seen[itemId] = true
                 if isEligible(itemId) then
                     eligibleCount = eligibleCount + 1
-                    if isPreferred(itemId) then
+                    if isPreferred(itemId, entry) then
                         table.insert(targetItemIds, itemId)
                     end
                 end

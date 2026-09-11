@@ -39,6 +39,46 @@ or difficulties. Whether a candidate remains useful is decided by its actual
 comparison with equipped gear. Voidcore history is separate because a prior
 Voidcore reward changes that system's repeatable pool.
 
+## 2026-09-10: Owned versions and recommendation usefulness
+
+Both recommendation modes suppress a preferred target if equipped or
+ordinary-bag gear is equal or better under the selected ownership rule.
+The character-scoped toggle selects `ITEM` (default: exact item ID) or `SLOT`
+(usable gear for the same slot). Compare recognized upgrade tracks first, then
+actual item level when tracks are equal or unknown. Missing data does not prove
+dominance. Compare every owned copy with each source-specific candidate; a
+weaker copy or lower difficulty must not hide an upgrade. Bank and warband
+storage are outside this lookup's scope.
+
+For Slot comparisons, one unrelated ring or trinket must not suppress an
+upgrade for the other slot: two distinct usable equal-or-better item IDs are
+required. A matching equal-or-better item ID still satisfies the same-item
+rule. Weapon comparisons use compatible equip-type families rather than
+assuming one-handed, two-handed, shield and offhand items are interchangeable.
+This is a conservative gear filter, not a simulation of unique-equipped
+categories, weapon loadouts or secondary-stat value.
+
+This refines the ownership decision above: current carried ownership is used,
+not historical possession, and preferences remain saved. Suppression changes
+the useful-target numerator only. Voidcore reward history continues to change
+its eligible pool independently. Equipment and bag changes refresh the visible
+recommendation panel.
+
+## 2026-09-10: Direct-drop and Voidcore raid levels
+
+Mythic raid direct-drop recommendations retain each boss's actual drop level:
+Myth 1/6, 2/6, or 3/6 for bosses 1–6 and Myth 9/6 for the final two.
+Voidcore raid rolls follow the equivalent Great Vault reward instead: Myth
+6/6 at item level 334 for bosses 1–6 and Myth 9/6 at item level 344 for the
+final two. The two ranking modes must carry separate item levels, ranks, and
+bonus IDs without mutating shared direct-drop entries.
+
+Encounter Journal links are source templates rather than authoritative for
+the recommendation's calculated rank. Tooltip construction replaces only a
+recognized upgrade-track bonus with the calculated source bonus, preserving
+all other bonus IDs and trailing item-link fields. Successful links are
+cached by item and requested rank; a transient missing link remains retryable.
+
 ## 2026-09-02: Presentation
 
 The recommendation list is content-first. Each result is one expandable card

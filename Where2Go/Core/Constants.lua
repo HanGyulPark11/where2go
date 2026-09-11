@@ -78,5 +78,6 @@ function Where2GoConstants.BuildDefaultCharDB()
             VOIDCORE = {},
         },
         voidcoreObtainedItems = {},
+        ownershipFilterMode = "ITEM",
     }
 end

@@ -6,6 +6,9 @@
   then uncheck exceptions, cache reconciliation and explicit filter resets.
 - Preferences: mode separation, no-op edits, source preservation, add/remove/
   clear undo and subscriber notifications.
+- Ownership: all carried copies, source-specific track/level comparisons,
+  same-item versus slot filtering, off-pool usable gear, conservative unknown
+  data, unchanged drop denominators, and independent Voidcore history.
 - Frame-boundary integration: deferred PVEFrame hooks preserving Blizzard
   scripts, show/hide, saved collapse, bounded viewport, card reuse after
   reranking, distinct empty states and active specialization/cache refresh.
@@ -18,10 +21,15 @@ secure-frame behavior or API/template compatibility in a running client.
 
 ## Live-client acceptance checklist
 
+Status: passed by user confirmation on 2026-09-11.
+
 1. Open the dungeon finder, raid finder and premade-group tabs. The small panel
    appears beside the finder; closing the finder hides the panel without closing
-   the independent browser. Reopen, collapse and expand, then `/reload` and
-   confirm the panel's collapse preference survives.
+   the independent browser. With a visible Raider.IO profile tooltip, confirm
+   the panel clears its full bounds and chooses the left side when the right
+   edge has no room. Drag only the title bar, reopen and `/reload` to confirm
+   the manual position persists, then right-click the title bar to restore
+   automatic placement. Also confirm the collapse preference survives.
 2. Use `/w2g` without the finder and confirm standalone recommendations. Use
    Manage items in each mode and verify the browser opens in that mode even
    when it is already visible.
@@ -41,13 +49,47 @@ secure-frame behavior or API/template compatibility in a running client.
    native item tooltips and header explanations.
 8. Open/close the finder in and out of combat with script errors enabled; check
    for blocked actions/taint and confirm Blizzard's normal finder still works.
+9. In both Drop and Voidcore, use Same item filtering and save a preferred item with an equal-or-better
+   version equipped or in ordinary bags. Confirm it is absent from targets but
+   remains saved and still contributes to the eligible pool (unless excluded by
+   Voidcore history). Check multiple copies, including a stronger bag copy, and
+   confirm higher-version sources and different same-slot items still appear.
+   Move/equip/remove the owned copy with the panel open and confirm refresh.
+   Repeat after `/reload` with cold item data and ensure there are no errors or
+   permanent false exclusions. Bank/warband-only ownership is not included.
+10. Switch to Slot filtering and confirm an equal-or-better usable item in the
+    same slot suppresses an unrelated preferred item; switch back and confirm
+    it returns. Confirm the selected rule survives reopening and `/reload`
+    and applies in both recommendation modes. For rings/trinkets, one strong
+    unrelated item must leave the second-slot upgrade visible; two distinct
+    usable equal-or-better items may suppress it. Check compatible weapon
+    types and unavailable item data without false exclusions.
+11. Hover the five reported examples in recommendation rows: Ferocious
+    Scaleboots from Sszorak, Silken Voodoo Drape (item 268253) from The Coiled
+    Altar, the mail waist item from Atroxus in Voidscar Arena, Gebbo's
+    Bottomless Bag (item 270164), and Boots of the Reckless Wayfarer (item
+    268258). Confirm the last two show Myth 2/6 at item level 321 rather than
+    Champion 2/6.
+    Confirm each tooltip matches the row's calculated track and level rather
+    than a stale Champion 3/6 link. In Drop mode, Mythic raid bosses 1–6 must
+    retain their direct 1/6, 2/6, or 3/6 levels and the final two must show
+    Myth 9/6 (344). In Voidcore mode, bosses 1–6 must show Myth 6/6 (334) and
+    the final two must show Myth 9/6 (344). Re-hover after a cold-cache miss
+    and confirm the live link resolves without losing non-track item effects.
+    Verify the browser results, saved preferences, and recommendation-card rows
+    show localized slot · item level · fixed secondary stats; rows with no
+    fixed secondary stats must end after item level.
 
 ## Scope and carried limitations
 
-- No live-client acceptance checks were performed by the automated tests.
-- The existing ItemRow link lookup can change Encounter Journal selection and
-  filters on first hover; missing links are cached for the session. This comes
-  from checkpoint `18d1d3e` and is not altered by the layout redesign.
+- Automated tests do not perform live-client acceptance checks; the checklist
+  above was completed separately in the running client and confirmed by the user.
+- ItemRow's live-link lookup can change Encounter Journal selection and filters
+  on the first uncached hover. It retains a corrected Encounter Journal link only when
+  C_TooltipInfo reports the requested item level and track/rank; a metadata
+  mismatch or missing expected metadata uses the canonical synthetic link.
+  Successful results and definitive mismatches are cached per item and requested
+  rank; transient misses retry on a later hover.
 - Voidcore reward-event compatibility still needs a real roll verification as
   recorded in the existing TODO. The UI does not claim complete historical data.
 - Existing source names remain data-owned English strings. Addon labels are

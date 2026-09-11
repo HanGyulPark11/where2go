@@ -4,11 +4,12 @@ local PANEL_WIDTH = 390
 local EXPANDED_HEIGHT = 510
 local COLLAPSED_HEIGHT = 38
 local TITLE_HEIGHT = 38
-local CONTROLS_HEIGHT = 82
+local CONTROLS_HEIGHT = 108
 local VIEWPORT_HEIGHT = EXPANDED_HEIGHT - TITLE_HEIGHT - CONTROLS_HEIGHT - 16
 local CARD_HEADER_HEIGHT = 60
 local ITEM_ROW_HEIGHT = 32
 local CARD_GAP = 6
+local PANEL_GAP = 8
 
 local panelFrame
 local bodyFrame
@@ -18,6 +19,7 @@ local emptyText
 local specText
 local summaryText
 local collapseButton
+local ownershipButton
 local modeButtons = {}
 local cardPool = {}
 local expansionByContent = {}
@@ -45,6 +47,13 @@ local function EnsureCharacterUI()
     Where2GoCharDB.ui = Where2GoCharDB.ui or {}
     if Where2GoCharDB.ui.panelCollapsed == nil then
         Where2GoCharDB.ui.panelCollapsed = false
+    end
+    local position = Where2GoCharDB.ui.panelPosition
+    if type(position) ~= "table" or type(position.x) ~= "number" or type(position.y) ~= "number"
+        or position.x ~= position.x or position.y ~= position.y
+        or position.x == math.huge or position.x == -math.huge
+        or position.y == math.huge or position.y == -math.huge then
+        Where2GoCharDB.ui.panelPosition = nil
     end
     return Where2GoCharDB.ui
 end
@@ -191,7 +200,8 @@ local function PopulateCard(card, result)
         local row = EnsureItemRow(card, index)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", card.frame, "TOPLEFT", 14, -CARD_HEADER_HEIGHT - ((index - 1) * ITEM_ROW_HEIGHT))
-        Where2GoItemRow.Populate(row, itemId, result.ilvl, result.name, result.bonusId)
+        Where2GoItemRow.Populate(row, itemId, result.ilvl, result.name, result.bonusId,
+            result.trackKey, result.trackRank)
     end
 
     for index = card.rowCount + 1, #card.rows do
@@ -239,12 +249,15 @@ local function GetRankedResults()
     return Where2GoDirectDrop.GetRankedResults()
 end
 
-local function AnchorBesideFinder()
-    if not panelFrame or not PVEFrame then
-        return
+local function OwnershipMode()
+    local mode = Where2GoEquipment.GetOwnershipMode()
+    return mode == "SLOT" and "SLOT" or "ITEM"
+end
+
+local function UpdateOwnershipButton()
+    if ownershipButton then
+        ownershipButton:SetText(L(OwnershipMode() == "SLOT" and "PANEL_OWNERSHIP_SLOT" or "PANEL_OWNERSHIP_ITEM"))
     end
-    panelFrame:ClearAllPoints()
-    panelFrame:SetPoint("TOPLEFT", PVEFrame, "TOPRIGHT", 8, 0)
 end
 
 local function AnchorStandalone()
@@ -252,15 +265,203 @@ local function AnchorStandalone()
     panelFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 end
 
+local function RaiderIOTooltip()
+    local tooltip = _G.RaiderIO_ProfileTooltip
+    if tooltip and tooltip:IsShown() then
+        return tooltip
+    end
+end
+
+local function IsFiniteNumber(value)
+    return type(value) == "number" and value == value
+        and value ~= math.huge and value ~= -math.huge
+end
+
+local function ScreenBounds(frame)
+    local scale = frame:GetEffectiveScale()
+    local left, right = frame:GetLeft(), frame:GetRight()
+    local bottom, top = frame:GetBottom(), frame:GetTop()
+    if not IsFiniteNumber(scale) or scale <= 0
+        or not IsFiniteNumber(left) or not IsFiniteNumber(right)
+        or not IsFiniteNumber(bottom) or not IsFiniteNumber(top) then
+        return
+    end
+    return left * scale, right * scale, bottom * scale, top * scale
+end
+
+local function HasRoomToRight(frame)
+    local _, tooltipRight = ScreenBounds(frame)
+    local _, screenRight = ScreenBounds(UIParent)
+    local scale = panelFrame:GetEffectiveScale()
+    if not tooltipRight or not screenRight or not IsFiniteNumber(scale) or scale <= 0 then
+        return
+    end
+    return tooltipRight + ((PANEL_WIDTH + PANEL_GAP) * scale) <= screenRight
+end
+
+local function RectanglesIntersect(firstLeft, firstRight, firstBottom, firstTop,
+        secondLeft, secondRight, secondBottom, secondTop)
+    return firstLeft < secondRight and firstRight > secondLeft
+        and firstBottom < secondTop and firstTop > secondBottom
+end
+
+local function LeftPlacementIntersects(frame, other)
+    local frameLeft, _, _, frameTop = ScreenBounds(frame)
+    local secondLeft, secondRight, secondBottom, secondTop = ScreenBounds(other)
+    local scale = panelFrame:GetEffectiveScale()
+    local width, height = panelFrame:GetWidth(), panelFrame:GetHeight()
+    if not frameLeft or not frameTop or not secondLeft
+        or not IsFiniteNumber(scale) or scale <= 0
+        or not IsFiniteNumber(width) or not IsFiniteNumber(height) then
+        return false
+    end
+    local candidateRight = frameLeft - (PANEL_GAP * scale)
+    local candidateLeft = candidateRight - (width * scale)
+    local candidateTop = frameTop
+    local candidateBottom = candidateTop - (height * scale)
+    return RectanglesIntersect(candidateLeft, candidateRight, candidateBottom, candidateTop,
+        secondLeft, secondRight, secondBottom, secondTop)
+end
+
+local function RightPlacementIntersects(frame, other)
+    local _, frameRight, _, frameTop = ScreenBounds(frame)
+    local secondLeft, secondRight, secondBottom, secondTop = ScreenBounds(other)
+    local scale = panelFrame:GetEffectiveScale()
+    local width, height = panelFrame:GetWidth(), panelFrame:GetHeight()
+    if not frameRight or not frameTop or not secondLeft
+        or not IsFiniteNumber(scale) or scale <= 0
+        or not IsFiniteNumber(width) or not IsFiniteNumber(height) then
+        return false
+    end
+    local candidateLeft = frameRight + (PANEL_GAP * scale)
+    local candidateRight = candidateLeft + (width * scale)
+    local candidateTop = frameTop
+    local candidateBottom = candidateTop - (height * scale)
+    return RectanglesIntersect(candidateLeft, candidateRight, candidateBottom, candidateTop,
+        secondLeft, secondRight, secondBottom, secondTop)
+end
+
+local function LeftmostFrame(first, second)
+    local firstLeft = ScreenBounds(first)
+    local secondLeft = ScreenBounds(second)
+    return firstLeft <= secondLeft and first or second
+end
+
+local function RightmostFrame(first, second)
+    local _, firstRight = ScreenBounds(first)
+    local _, secondRight = ScreenBounds(second)
+    return firstRight >= secondRight and first or second
+end
+
+local function AnchorBeside(frame, rightSide)
+    if not panelFrame or not frame then
+        return
+    end
+    panelFrame:ClearAllPoints()
+    if rightSide == nil then
+        rightSide = HasRoomToRight(frame)
+        if rightSide == nil then
+            rightSide = true
+        end
+    end
+    if rightSide then
+        panelFrame:SetPoint("TOPLEFT", frame, "TOPRIGHT", PANEL_GAP, 0)
+    else
+        panelFrame:SetPoint("TOPRIGHT", frame, "TOPLEFT", -PANEL_GAP, 0)
+    end
+end
+
+local function AnchorAutomatic()
+    local tooltip = RaiderIOTooltip()
+    if tooltip then
+        local rightFrame = tooltip
+        if PVEFrame and PVEFrame:IsShown() and RightPlacementIntersects(tooltip, PVEFrame) then
+            rightFrame = RightmostFrame(tooltip, PVEFrame)
+        end
+        local roomToRight = HasRoomToRight(rightFrame)
+        if roomToRight ~= false then
+            AnchorBeside(rightFrame, true)
+        else
+            local leftFrame = tooltip
+            if PVEFrame and PVEFrame:IsShown() and LeftPlacementIntersects(tooltip, PVEFrame) then
+                leftFrame = LeftmostFrame(tooltip, PVEFrame)
+            end
+            AnchorBeside(leftFrame, false)
+        end
+    elseif PVEFrame and PVEFrame:IsShown() then
+        AnchorBeside(PVEFrame)
+    else
+        AnchorStandalone()
+    end
+end
+
+local function AnchorSavedPosition()
+    local position = EnsureCharacterUI().panelPosition
+    if not position then
+        return false
+    end
+    panelFrame:ClearAllPoints()
+    panelFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", position.x, position.y)
+    return true
+end
+
+local function ApplyPlacement()
+    if not AnchorSavedPosition() then
+        AnchorAutomatic()
+    end
+end
+
+local function SaveManualPosition()
+    local left, _, _, top = ScreenBounds(panelFrame)
+    local parentLeft, _, _, parentTop = ScreenBounds(UIParent)
+    local scale = UIParent:GetEffectiveScale()
+    if not left or not top or not parentLeft or not parentTop
+        or not IsFiniteNumber(scale) or scale <= 0 then
+        return false
+    end
+    EnsureCharacterUI().panelPosition = {
+        x = (left - parentLeft) / scale,
+        y = (top - parentTop) / scale,
+    }
+    return true
+end
+
 local function CreatePanel()
     local frame = CreateFrame("Frame", "Where2GoPanel", UIParent, "BackdropTemplate")
     frame:SetSize(PANEL_WIDTH, EXPANDED_HEIGHT)
     frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
     frame:EnableMouse(true)
     Where2GoTheme.Box(frame, "bg")
 
-    local title = Where2GoTheme.Text(frame, "GameFontNormalLarge", L("PANEL_TITLE"))
-    title:SetPoint("LEFT", frame, "TOPLEFT", 12, -TITLE_HEIGHT / 2)
+    local titleBar = CreateFrame("Button", "Where2GoPanelTitleBar", frame)
+    titleBar:SetPoint("TOPLEFT", 0, 0)
+    titleBar:SetPoint("TOPRIGHT", -40, 0)
+    titleBar:SetHeight(TITLE_HEIGHT)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:RegisterForClicks("RightButtonUp")
+    titleBar:SetScript("OnDragStart", function()
+        frame.dragging = true
+        frame:StartMoving()
+    end)
+    titleBar:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        frame.dragging = nil
+        if SaveManualPosition() then
+            AnchorSavedPosition()
+        end
+    end)
+    titleBar:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then
+            EnsureCharacterUI().panelPosition = nil
+            ApplyPlacement()
+        end
+    end)
+    frame.titleBar = titleBar
+
+    local title = Where2GoTheme.Text(titleBar, "GameFontNormalLarge", L("PANEL_TITLE"))
+    title:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
 
     collapseButton = Where2GoTheme.Button(frame, "-", 24, 22, function()
         local ui = EnsureCharacterUI()
@@ -296,7 +497,23 @@ local function CreatePanel()
     frame.specText = specText
 
     summaryText = Where2GoTheme.Text(bodyFrame, "GameFontDisableSmall", "")
-    summaryText:SetPoint("TOPLEFT", 0, -50)
+    ownershipButton = Where2GoTheme.Button(bodyFrame, "", 190, 22, function()
+        local nextMode = OwnershipMode() == "ITEM" and "SLOT" or "ITEM"
+        Where2GoEquipment.SetOwnershipMode(nextMode)
+        UpdateOwnershipButton()
+        Where2GoPanel.Refresh()
+    end)
+    ownershipButton:SetPoint("TOPLEFT", 0, -52)
+    ownershipButton:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L("PANEL_OWNERSHIP_HELP"), 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    ownershipButton:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    frame.ownershipButton = ownershipButton
+    UpdateOwnershipButton()
+
+    summaryText:SetPoint("TOPLEFT", 0, -78)
     summaryText:SetPoint("RIGHT", bodyFrame, "RIGHT", 0, 0)
     summaryText:SetTextColor(unpack(Where2GoTheme.colors.muted))
 
@@ -317,6 +534,19 @@ local function CreatePanel()
     emptyText:SetWordWrap(true)
 
     panelFrame = frame
+    frame:SetScript("OnHide", function()
+        frame:StopMovingOrSizing()
+        frame.dragging = nil
+    end)
+    frame:SetScript("OnUpdate", function(_, elapsed)
+        local elapsedTotal = (rawget(frame, "placementElapsed") or 0) + elapsed
+        frame.placementElapsed = elapsedTotal
+        if elapsedTotal < 0.1 or rawget(frame, "dragging") or EnsureCharacterUI().panelPosition then
+            return
+        end
+        frame.placementElapsed = 0
+        AnchorAutomatic()
+    end)
     SetModeButtonStyles()
     UpdateCollapsedState()
     frame:Hide()
@@ -385,8 +615,8 @@ function Where2Go_TogglePanel()
     end
 
     if PVEFrame and PVEFrame:IsShown() then
-        AnchorBesideFinder()
-    else
+        ApplyPlacement()
+    elseif not AnchorSavedPosition() then
         AnchorStandalone()
     end
     Where2GoPanel.Refresh()
@@ -401,7 +631,7 @@ local function BindPVEFrame()
     hookedPVEFrame = PVEFrame
     PVEFrame:HookScript("OnShow", function()
         local frame = EnsurePanel()
-        AnchorBesideFinder()
+        ApplyPlacement()
         Where2GoPanel.Refresh()
         frame:Show()
     end)
@@ -413,7 +643,7 @@ local function BindPVEFrame()
 
     if PVEFrame:IsShown() then
         local frame = EnsurePanel()
-        AnchorBesideFinder()
+        ApplyPlacement()
         Where2GoPanel.Refresh()
         frame:Show()
     end
@@ -424,6 +654,8 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
+eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" or event == "PLAYER_LOGIN" then
         BindPVEFrame()

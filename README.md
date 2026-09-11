@@ -7,7 +7,10 @@ ranks content rather than recommending gear.
 ## Using the addon
 
 - Open the dungeon/group finder to see the compact recommendation panel beside
-  it. The panel hides with the finder and remembers whether you collapsed it.
+  it. If Raider.IO's profile tooltip is open, the panel uses its actual bounds
+  and moves to the available side. Drag the panel by its title bar to keep a
+  preferred position; right-click that bar to restore automatic placement. The
+  panel hides with the finder and remembers whether you collapsed it.
 - Use **Manage items** or `/w2g browse` to open the independent item browser.
   Filter/search the left list and manage saved preferences on the right.
 - Add one item directly, or select all filtered results, uncheck exceptions,
@@ -17,11 +20,18 @@ ranks content rather than recommending gear.
   mode. The recommendation panel refreshes immediately when preferences change.
 - Drop and Voidcore have independent preferred lists. Browsing can include
   multiple specs of your class; content ranking uses your active specialization.
+- Toggle the ownership filter between **Same item** (the default) and **Slot**.
+  Both check equipped gear and ordinary bags for equal-or-better items, using
+  upgrade track first and item level within a track. Same item compares the
+  exact item ID; Slot also compares usable gear for that slot. The setting is
+  remembered per character and shared by Drop and Voidcore. Saved preferences
+  stay intact. Bank and warband storage are not scanned.
 - `/w2g` still toggles standalone access to the recommendation panel.
 
 The ranking compares the share of preferred items in the eligible pool under
 an equal-outcome assumption. It is not a measured drop rate or time-per-run
-estimate and does not automatically exclude items based on equipped gear.
+estimate. Owned items still count in the eligible drop pool; ownership removes
+them only from useful targets, so the estimate is not artificially inflated.
 
 See [current state](docs/CURRENT_STATE.md) for verified status and open live
 work, [code map](docs/CODEMAP.md) for source/test navigation, and [UI

@@ -12,8 +12,11 @@ local STRINGS = {
     PANEL_SPEC_CONTEXT = "Ranking for: %s",
     PANEL_COUNT_SUMMARY = "%d preferred items · %d destinations",
     PANEL_CARD_COUNTS = "%d targets / %d eligible items",
+    PANEL_OWNERSHIP_ITEM = "Exclude: Same item",
+    PANEL_OWNERSHIP_SLOT = "Exclude: Slot",
+    PANEL_OWNERSHIP_HELP = "Exclude preferred gear you already own in equipped slots or regular bags. Same item compares its upgrade track first, then item level; Slot applies this to any item in the same slot.",
     PANEL_NO_PREFERRED = "Choose the items you want to see where to go next.",
-    PANEL_NO_MATCHES = "No matching targets for your current specialization.",
+    PANEL_NO_MATCHES = "No matching targets remain after specialization and owned-gear filtering.",
     NO_SPEC_SELECTED = "Where2Go: no specialization selected.",
 }
 
@@ -38,12 +41,13 @@ local function newScenario(options)
     env:InstallGlobals()
 
     Where2GoPanel = nil
+    RaiderIO_ProfileTooltip = nil
     Where2GoCharDB = options.charDB or {
         preferredItems = { DROP = { [101] = true }, VOIDCORE = {} },
         preferredItemSources = { DROP = {}, VOIDCORE = {} },
         voidcoreObtainedItems = {},
     }
-    Where2GoConstants = { ADDON_NAME = "Where2Go" }
+    Where2GoConstants = { ADDON_NAME = "Where2Go", EQUIPLOC_TO_SLOT = { INVTYPE_HEAD = "HEAD" } }
     GetLocale = nil
     dofile("Where2Go/Core/Locale.lua")
     dofile("Where2Go/Core/Preferences.lua")
@@ -70,6 +74,18 @@ local function newScenario(options)
         end,
     }
 
+    local ownershipMode = options.ownershipMode or "ITEM"
+    local ownershipModeChanges = {}
+    Where2GoEquipment = {
+        GetOwnershipMode = function()
+            return ownershipMode
+        end,
+        SetOwnershipMode = function(mode)
+            ownershipMode = mode
+            table.insert(ownershipModeChanges, mode)
+        end,
+    }
+
     dofile("Where2Go/UI/Theme.lua")
     Where2GoSources = { DUNGEONS = {}, RAIDS = {} }
     Where2GoTracks = { UPGRADE_TRACKS = {} }
@@ -78,6 +94,9 @@ local function newScenario(options)
     C_Item = {
         GetItemInfo = function(itemId)
             return "Item " .. itemId, nil, 1
+        end,
+        GetItemInfoInstant = function(itemId)
+            return itemId, nil, nil, "INVTYPE_HEAD"
         end,
         GetItemIconByID = function()
             return "Interface\\Icons\\INV_Misc_QuestionMark"
@@ -113,6 +132,10 @@ local function newScenario(options)
         },
         browserShows = browserShows,
         rankCalls = rankCalls,
+        ownershipModeChanges = ownershipModeChanges,
+        getOwnershipMode = function()
+            return ownershipMode
+        end,
         setDirectResults = function(results, specName)
             directResults = results
             directSpec = specName
@@ -122,6 +145,233 @@ local function newScenario(options)
             voidSpec = specName
         end,
     }
+end
+
+-- Break caught: encounter-journal links can arrive at Champion rank even when
+-- the recommendation calls for Myth, and caching either that link or a
+-- temporary miss by item alone makes later hovers show the wrong tooltip.
+do
+    local env = WowUI.New()
+    env:InstallGlobals()
+    Where2GoTheme = { colors = { hover = { 1, 1, 1 }, muted = { 1, 1, 1 } } }
+    Where2GoLocale = {
+        SlotLabel = function(slot) return slot end,
+        StatAbbrev = function(stat) return stat end,
+        TrackLabel = function(trackKey)
+            return ({ MYTH = "Myth", HERO = "Hero", CHAMPION = "Champion" })[trackKey] or trackKey
+        end,
+    }
+    Where2GoConstants = { EQUIPLOC_TO_SLOT = { INVTYPE_HEAD = "HEAD" } }
+    Where2GoItemStats = { STATS = {} }
+    Where2GoTracks = { UPGRADE_TRACKS = {
+        CHAMPION = { bonusIdStart = 12833 },
+        HERO = { bonusIdStart = 12841 },
+        MYTH = { bonusIdStart = 12849 },
+    } }
+    Where2GoRaidRanks = { MYTH_FINAL_BONUS_ID = 13848 }
+    Where2GoSources = {
+        DUNGEONS = { { instanceId = 1, encounters = {
+            { bossId = 11, itemIds = { 501 } },
+            { bossId = 12, itemIds = { 502 } },
+            { bossId = 13, itemIds = { 503 } },
+            { bossId = 14, itemIds = { 270164 } },
+            { bossId = 15, itemIds = { 268258 } },
+            { bossId = 16, itemIds = { 504 } },
+        } } },
+        RAIDS = { { instanceId = 2, encounters = {
+            { bossId = 21, itemIds = { 500 } },
+        } } },
+    }
+    C_Item = {
+        GetItemInfo = function(itemId) return "Item " .. itemId, nil, 1 end,
+        GetItemInfoInstant = function(itemId) return itemId, nil, nil, "INVTYPE_HEAD" end,
+        GetItemIconByID = function() return 1 end,
+    }
+    ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" } }
+    strsplit = function(separator, value)
+        local fields = {}
+        for field in (value .. separator):gmatch("(.-)" .. separator) do
+            table.insert(fields, field)
+        end
+        return unpack(fields)
+    end
+    GameTooltip = {
+        SetOwner = function() end,
+        SetHyperlink = function(self, link) self.link = link end,
+        SetItemByID = function() end,
+        AddLine = function() end,
+        Show = function() end,
+        Hide = function() end,
+    }
+
+    local encounter
+    local ejCalls = {}
+    local retryCalls = 0
+    local conflictCalls = 0
+    EJ_SetDifficulty = function() table.insert(ejCalls, "difficulty") end
+    EJ_SelectInstance = function() table.insert(ejCalls, "instance") end
+    EJ_SelectEncounter = function(bossId) encounter = bossId end
+    EJ_SetLootFilter = function() end
+    EJ_GetNumLoot = function() return 1 end
+    C_EncounterJournal = {
+        GetLootInfoByIndex = function()
+            if encounter == 12 then
+                retryCalls = retryCalls + 1
+                if retryCalls == 1 then return nil end
+            end
+            if encounter == 14 then conflictCalls = conflictCalls + 1 end
+            local itemId = encounter == 21 and 500 or (encounter == 11 and 501
+                or (encounter == 13 and 503 or (encounter == 14 and 270164
+                    or (encounter == 15 and 268258 or (encounter == 16 and 504 or 502)))))
+            return {
+                itemID = itemId,
+                link = "item:" .. itemId .. ":0:0:0:0:0:0:0:0:0:0:1:2:12835:777:2:42:43",
+            }
+        end,
+    }
+
+    dofile("Where2Go/UI/ItemRow.lua")
+    local validationRetryCalls = 0
+    C_TooltipInfo = {
+        GetHyperlink = function(link)
+            if link:find("item:504:", 1, true) then
+                validationRetryCalls = validationRetryCalls + 1
+                if validationRetryCalls == 1 then return nil end
+            end
+            local isConflict = link:find("item:270164:", 1, true) and link:find(":777:", 1, true)
+            if link:find("item:503:", 1, true) and link:find(":13848", 1, true) then
+                return { lines = {
+                    { args = { "Item Level 344" } },
+                    { args = { "Mythic" } },
+                } }
+            end
+            local ilvl, track = "Item Level 321", "Myth 2/6"
+            if link:find(":12843", 1, true) then ilvl, track = "Item Level 311", "Hero 3/6" end
+            if link:find(":12849", 1, true) then ilvl, track = "Item Level 318", "Myth 1/6" end
+            return { lines = {
+                { leftText = isConflict and "Item Level 308" or ilvl },
+                { leftText = isConflict and "Champion 2/6" or track },
+            } }
+        end,
+    }
+    local surfaceCalls = 0
+    TooltipUtil = {
+        SurfaceArgs = function(data)
+            surfaceCalls = surfaceCalls + 1
+            for _, line in ipairs(data.lines) do
+                if line.args then line.leftText = line.args[1] end
+            end
+        end,
+    }
+    local function itemRow(itemId, bonusId, ilvl, trackKey, trackRank)
+        local row = env:CreateFrame("Button", nil, UIParent)
+        Where2GoItemRow.CreateWidgets(row, 24, 0)
+        Where2GoItemRow.Populate(row, itemId, ilvl, nil, bonusId, trackKey, trackRank)
+        return row
+    end
+    local function hover(itemId, bonusId, ilvl, trackKey, trackRank)
+        local row = itemRow(itemId, bonusId, ilvl, trackKey, trackRank)
+        env:RunScript(row, "OnEnter")
+        return GameTooltip.link
+    end
+
+    assert(hover(270164, 12850, 321, "MYTH", 2) == "item:270164:0:0:0:0:0:0:0:0:0:0:0:1:12850",
+        "Gebbo's Bottomless Bag must fall back to the canonical Myth 2/6 link when C_TooltipInfo renders the corrected EJ link as Champion 2/6")
+    assert(hover(270164, 12850, 321, "MYTH", 2) == "item:270164:0:0:0:0:0:0:0:0:0:0:0:1:12850"
+            and conflictCalls == 1,
+        "a definitive tooltip conflict should be cached so later hovers do not mutate Encounter Journal again")
+    assert(ejCalls[1] == "instance" and ejCalls[2] == "difficulty",
+        "Encounter Journal must select the instance before setting difficulty")
+    assert(hover(268258, 12850, 321, "MYTH", 2) == "item:268258:0:0:0:0:0:0:0:0:0:0:1:2:777:12850:2:42:43",
+        "Boots of the Reckless Wayfarer must retain a validated complete Encounter Journal link and its non-track bonus")
+
+    local expectedRaid = "item:500:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43"
+    assert(hover(500, 12849, 318, "MYTH", 1) == expectedRaid,
+        "a raid tooltip must replace an Encounter Journal Champion track with the requested Myth track and preserve its remaining fields")
+
+    assert(hover(501, 12843, 311, "HERO", 3) == "item:501:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43",
+        "the first requested rank should be represented in the live tooltip")
+    assert(hover(501, 12849, 318, "MYTH", 1) == "item:501:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43",
+        "a second requested rank for the same item must not reuse the first cached track")
+
+    assert(hover(501, 99999) == "item:501:0:0:0:0:0:0:0:0:0:0:0:1:99999",
+        "a bonus without recoverable level and track metadata must use the canonical link rather than an unvalidated full link")
+
+    assert(hover(503, 13848, 344, "MYTH", 9) == "item:503:0:0:0:0:0:0:0:0:0:0:1:2:777:13848:2:42:43",
+        "a special final-boss rank should retain the full link when surfaced tooltip data confirms its unique item level")
+    assert(surfaceCalls > 0, "tooltip validation must surface structured C_TooltipInfo line arguments")
+
+    assert(hover(502, 12843, 311, "HERO", 3) == "item:502:0:0:0:0:0:0:0:0:0:0:0:1:12843",
+        "a transient Encounter Journal miss should use the synthetic fallback for that hover")
+    assert(hover(502, 12843, 311, "HERO", 3) == "item:502:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43" and retryCalls == 2,
+        "a transient Encounter Journal miss must retry later and preserve real non-track bonuses when it succeeds")
+
+    assert(hover(504, 12843, 311, "HERO", 3) == "item:504:0:0:0:0:0:0:0:0:0:0:0:1:12843",
+        "temporarily unavailable tooltip metadata should use the canonical fallback for that hover")
+    assert(hover(504, 12843, 311, "HERO", 3) == "item:504:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43"
+            and validationRetryCalls == 2,
+        "temporarily unavailable tooltip metadata must be retried so a later hover can preserve the validated full link")
+
+    local reusedRow = itemRow(501, 12843, 311, "HERO", 3)
+    env:RunScript(reusedRow, "OnEnter")
+    Where2GoItemRow.Populate(reusedRow, 268258, 321, nil, 12850, "MYTH", 2)
+    assert(GameTooltip.link == "item:268258:0:0:0:0:0:0:0:0:0:0:1:2:777:12850:2:42:43",
+        "repopulating a hovered pooled row must immediately replace the old item's visible tooltip")
+
+    local loadCalls = 0
+    EJ_SelectInstance = nil
+    C_EncounterJournal = nil
+    C_AddOns = { LoadAddOn = function()
+        loadCalls = loadCalls + 1
+        EJ_SetDifficulty = function() end
+        EJ_SelectInstance = function() end
+        EJ_SelectEncounter = function(bossId) encounter = bossId end
+        EJ_SetLootFilter = function() end
+        EJ_GetNumLoot = function() return 1 end
+        C_EncounterJournal = { GetLootInfoByIndex = function()
+            return { itemID = 503, link = "item:503:0:0:0:0:0:0:0:0:0:0:1:2:12835:777:2:42:43" }
+        end }
+    end }
+    assert(hover(503, 12849, 318, "MYTH", 1) == "item:503:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43" and loadCalls == 1,
+        "the first hover should load Encounter Journal before checking its APIs and preserve the real link metadata")
+end
+
+-- Break caught: the ownership exclusion control either changes only one
+-- recommendation source, fails to persist through Equipment, or lets an
+-- inventory update leave the visible ranking stale.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    PVEFrame:Show()
+    local toggle = env:GetFrame("Where2GoPanel").ownershipButton
+    assert(toggle:GetText() == STRINGS.PANEL_OWNERSHIP_ITEM,
+        "new panels should default the ownership exclusion criterion to the same item")
+    local viewportHeight = env:GetFrame("Where2GoPanelScrollFrame"):GetHeight()
+    assert(viewportHeight > 0 and viewportHeight < env:GetFrame("Where2GoPanel"):GetHeight() - 100,
+        "the fixed recommendation panel should reserve a bounded control row for ownership filtering")
+
+    local dropCalls = scenario.rankCalls.DROP
+    env:Click(toggle)
+    assert(scenario.getOwnershipMode() == "SLOT" and scenario.ownershipModeChanges[1] == "SLOT",
+        "clicking the shared control should persist SLOT exclusion through Equipment")
+    assert(toggle:GetText() == STRINGS.PANEL_OWNERSHIP_SLOT,
+        "the control should show the active exclusion criterion")
+    assert(scenario.rankCalls.DROP == dropCalls + 1,
+        "changing ownership exclusion should immediately refresh the active Drop ranking")
+
+    Where2GoPanel.SetMode("VOIDCORE")
+    assert(env:GetFrame("Where2GoPanel").ownershipButton == toggle
+            and toggle:GetText() == STRINGS.PANEL_OWNERSHIP_SLOT,
+        "Drop and Voidcore should share one persisted ownership exclusion setting")
+    env:Click(toggle)
+    assert(scenario.getOwnershipMode() == "ITEM" and scenario.ownershipModeChanges[2] == "ITEM",
+        "a second click should restore ITEM exclusion for both recommendation modes")
+
+    local voidCalls = scenario.rankCalls.VOIDCORE
+    env:FireEvent("BAG_UPDATE_DELAYED")
+    env:FireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
+    assert(scenario.rankCalls.VOIDCORE == voidCalls + 2,
+        "bag and equipment events should each refresh the visible active ranking")
 end
 
 -- Break caught: binding only at file load misses Blizzard's later-created PVEFrame,
@@ -154,6 +404,169 @@ do
     env:FireEvent("PLAYER_LOGIN")
     PVEFrame:Show()
     assert(blizzardShows == 2, "rebinding checks must not duplicate PVEFrame hooks")
+end
+
+-- Break caught: left-side candidate collision math compares source coordinate
+-- systems directly even though UIParent, Raider.IO, the finder, and the panel can differ.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    local tooltip = env:CreateFrame("Frame", "RaiderIO_ProfileTooltip", UIParent)
+    RaiderIO_ProfileTooltip = tooltip
+    UIParent.effectiveScale = 0.8
+    PVEFrame.effectiveScale = 0.8
+    PVEFrame.left, PVEFrame.right, PVEFrame.bottom, PVEFrame.top = 1300, 1650, 375, 1125
+    tooltip.effectiveScale = 0.5
+    tooltip.left, tooltip.right, tooltip.bottom, tooltip.top = 2800, 3000, 700, 1800
+    tooltip:Show()
+
+    PVEFrame:Show()
+    local panel = env:GetFrame("Where2GoPanel")
+    panel.effectiveScale = 0.5
+    env:RunScript(panel, "OnUpdate", 0.2)
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPRIGHT" and anchor[2] == PVEFrame and anchor[3] == "TOPLEFT",
+        "mixed effective scales should still detect a left-side panel candidate intersecting the finder")
+end
+
+-- Break caught: Raider.IO can be visible before its layout has produced usable
+-- coordinates, which must not interrupt the finder lifecycle hook.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    local tooltip = env:CreateFrame("Frame", "RaiderIO_ProfileTooltip", UIParent)
+    RaiderIO_ProfileTooltip = tooltip
+    tooltip.GetRight = function() return nil end
+    tooltip:Show()
+
+    local ok, err = pcall(PVEFrame.Show, PVEFrame)
+    assert(ok, "incomplete Raider.IO geometry should not raise an error: " .. tostring(err))
+    local panel = env:GetFrame("Where2GoPanel")
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPLEFT" and anchor[2] == tooltip and anchor[3] == "TOPRIGHT",
+        "incomplete Raider.IO geometry should use the stable default side until coordinates settle")
+end
+
+-- Break caught: a right-side recommendation candidate can overlap a finder
+-- positioned immediately to the right of Raider.IO.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    local tooltip = env:CreateFrame("Frame", "RaiderIO_ProfileTooltip", UIParent)
+    RaiderIO_ProfileTooltip = tooltip
+    PVEFrame.left, PVEFrame.right, PVEFrame.bottom, PVEFrame.top = 750, 1310, 300, 920
+    tooltip.left, tooltip.right, tooltip.bottom, tooltip.top = 400, 700, 350, 880
+    tooltip:Show()
+
+    PVEFrame:Show()
+    local panel = env:GetFrame("Where2GoPanel")
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPLEFT" and anchor[2] == PVEFrame and anchor[3] == "TOPRIGHT",
+        "a right-side panel candidate that intersects the finder should move beyond the finder")
+end
+
+-- Break caught: the recommendation panel ignores the visible Raider.IO profile
+-- tooltip, keeps covering it after its dimensions settle, or chooses the wrong
+-- side when the right screen edge has no room.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    local tooltip = env:CreateFrame("Frame", "RaiderIO_ProfileTooltip", UIParent)
+    RaiderIO_ProfileTooltip = tooltip
+    tooltip:SetSize(280, 420)
+    tooltip.left, tooltip.right, tooltip.top = 900, 1180, 900
+    tooltip:Show()
+
+    PVEFrame:Show()
+    local panel = env:GetFrame("Where2GoPanel")
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPLEFT" and anchor[2] == tooltip and anchor[3] == "TOPRIGHT",
+        "a visible Raider.IO tooltip with room on the right should place recommendations beyond its actual bounds")
+
+    tooltip.left, tooltip.right = 1500, 1780
+    env:RunScript(panel, "OnUpdate", 0.2)
+    anchor = panel.points[1]
+    assert(anchor[1] == "TOPRIGHT" and anchor[2] == tooltip and anchor[3] == "TOPLEFT",
+        "a delayed Raider.IO size or position change that removes right-side room should move recommendations to its left")
+
+    PVEFrame.left, PVEFrame.right, PVEFrame.bottom, PVEFrame.top = 1000, 1560, 300, 920
+    tooltip.left, tooltip.right, tooltip.bottom, tooltip.top = 1400, 1820, 350, 880
+    env:RunScript(panel, "OnUpdate", 0.2)
+    anchor = panel.points[1]
+    assert(anchor[1] == "TOPRIGHT" and anchor[2] == PVEFrame and anchor[3] == "TOPLEFT",
+        "when the finder intersects an edge-constrained Raider.IO tooltip, fallback should clear the combined windows")
+
+    PVEFrame.left, PVEFrame.right = 900, 1300
+    tooltip.left, tooltip.right = 1450, 1780
+    env:RunScript(panel, "OnUpdate", 0.2)
+    anchor = panel.points[1]
+    assert(anchor[1] == "TOPRIGHT" and anchor[2] == PVEFrame and anchor[3] == "TOPLEFT",
+        "a left-side panel candidate that intersects the finder should move beyond the finder")
+end
+
+-- Break caught: dragging outside the title bar moves the panel, a manual
+-- position is lost on reopen, or reset cannot return to automatic placement.
+do
+    local scenario = newScenario({ pveFrame = true, pveShown = false })
+    local env = scenario.env
+    PVEFrame:Show()
+    local panel = env:GetFrame("Where2GoPanel")
+    local titleBar = env:GetFrame("Where2GoPanelTitleBar")
+    assert(titleBar.dragButtons[1] == "LeftButton", "only the title bar should register left-button dragging")
+
+    env:RunScript(titleBar, "OnDragStart")
+    assert(panel.moving == true, "title-bar drag should begin moving the recommendation panel")
+    local automaticAnchor = panel.points[1]
+    env:RunScript(panel, "OnUpdate", 0.2)
+    assert(panel.points[1] == automaticAnchor and panel.moving == true,
+        "automatic placement should not change the panel's anchor while the player is dragging it")
+    panel:Hide()
+    assert(panel.moving == false, "hiding the panel during a title-bar drag should stop movement")
+    Where2Go_TogglePanel()
+
+    env:RunScript(titleBar, "OnDragStart")
+    UIParent.effectiveScale, panel.effectiveScale = 0.8, 0.8
+    panel.left, panel.top = 120, 760
+    panel:ClearAllPoints()
+    panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 120, 100)
+    env:RunScript(titleBar, "OnDragStop")
+    assert(panel.moving == false and Where2GoCharDB.ui.panelPosition,
+        "ending a title-bar drag should stop movement and persist a manual position")
+    assert(Where2GoCharDB.ui.panelPosition.x == 120 and Where2GoCharDB.ui.panelPosition.y == -320,
+        "manual coordinates should remain in UIParent space when the interface scale is not one")
+    local savedAnchor = panel.points[1]
+    assert(savedAnchor[1] == "TOPLEFT" and savedAnchor[2] == UIParent and savedAnchor[3] == "TOPLEFT"
+            and savedAnchor[4] == 120 and savedAnchor[5] == -320,
+        "drag stop should normalize the live anchor to the saved top-left coordinates")
+
+    panel:Hide()
+    Where2Go_TogglePanel()
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPLEFT" and anchor[2] == UIParent,
+        "a persisted manual position should win when the recommendation panel reopens")
+
+    env:Click(titleBar, "RightButton")
+    assert(Where2GoCharDB.ui.panelPosition == nil, "right-clicking the title bar should clear the manual position")
+    anchor = panel.points[1]
+    assert(anchor[2] == PVEFrame and anchor[3] == "TOPRIGHT",
+        "resetting the position should immediately restore automatic placement")
+end
+
+-- Break caught: a saved title-bar drag position is ignored after the addon
+-- reloads and constructs a new recommendation panel.
+do
+    local charDB = {
+        preferredItems = { DROP = { [101] = true }, VOIDCORE = {} },
+        preferredItemSources = { DROP = {}, VOIDCORE = {} },
+        voidcoreObtainedItems = {},
+        ui = { panelPosition = { x = 120, y = -320 } },
+    }
+    local scenario = newScenario({ charDB = charDB, pveFrame = true, pveShown = false })
+    PVEFrame:Show()
+    local panel = scenario.env:GetFrame("Where2GoPanel")
+    local anchor = panel.points[1]
+    assert(anchor[1] == "TOPLEFT" and anchor[2] == UIParent and anchor[4] == 120 and anchor[5] == -320,
+        "a valid saved position should be restored when the panel is recreated after reload")
 end
 
 -- Break caught: collapse state is stored account-wide/in memory only, or body
@@ -215,6 +628,8 @@ do
     assert(panel.specText:GetText() == "Ranking for: Restoration",
         "the panel should state the active specialization used for ranking")
     local firstRow = env:GetFrame("Where2GoPanelCard1Row1")
+    assert(firstRow.summary:GetText() == "Head · 250",
+        "recommendation rows must omit the secondary-stat segment when an item has no fixed secondary stats")
     assert(firstRow.name:GetWidth() > 0 and firstRow.name:GetWidth() <= firstRow:GetWidth() - 28
             and firstRow.summary:GetWidth() <= firstRow:GetWidth() - 28,
         "panel item rows should bound long item names and summaries to the card width")

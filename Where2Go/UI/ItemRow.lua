@@ -1,5 +1,6 @@
 -- Shared item-row rendering: icon + quality-colored name + a compact
--- "ilvl · secondary-stat" summary line, with a real GameTooltip on hover.
+-- "slot · ilvl · secondary-stat" summary line, with a real GameTooltip on hover.
+-- luacheck: globals C_TooltipInfo TooltipUtil
 -- Used by both UI/BrowserPanel.lua (Results/Staged/Preferred rows) and
 -- UI/Panel.lua (expanded card item rows) so both windows render items
 -- identically. See
@@ -54,9 +55,9 @@ end
 -- assumption (Where2GoRaidRanks.GetMythicPlusIlvl). ReplaceTrackBonusId
 -- swaps out just the track-range bonus ID for the caller's own
 -- correctly-computed one, keeping any other real bonus ID (e.g. an
--- on-equip-effect variant) intact. Raid items skip this entirely --
--- Mythic raid difficulty is a single fixed tier with no such ambiguity,
--- so their live link's bonus ID is trusted as-is.
+-- on-equip-effect variant) intact. Encounter Journal links may be returned
+-- at a lower rank than the recommendation for either dungeon or raid loot,
+-- so both use the caller's calculated track bonus ID.
 local function GetKnownTrackBonusIds()
     local known = {}
     for _, track in pairs(Where2GoTracks.UPGRADE_TRACKS) do
@@ -89,7 +90,15 @@ local function ReplaceTrackBonusId(link, trackBonusId)
     local prefix = table.concat(
         { "item", fields[2], fields[3], fields[4], fields[5], fields[6], fields[7], fields[8], fields[9], fields[10], fields[11], fields[12], fields[13] },
         ":")
-    return prefix .. ":" .. #keptBonusIds .. ":" .. table.concat(keptBonusIds, ":")
+    local trailingFields = {}
+    for i = 15 + numBonusIds, #fields do
+        table.insert(trailingFields, fields[i])
+    end
+    local replaced = prefix .. ":" .. #keptBonusIds .. ":" .. table.concat(keptBonusIds, ":")
+    if #trailingFields > 0 then
+        replaced = replaced .. ":" .. table.concat(trailingFields, ":")
+    end
+    return replaced
 end
 
 local function EnsureEncounterJournalLoaded()
@@ -100,14 +109,17 @@ local function EnsureEncounterJournalLoaded()
     end
 end
 
--- itemId -> real link (or false if unavailable), cached for the session.
+-- itemId -> requested track bonus ID -> validated real link or false for a
+-- definitive metadata conflict, cached for the session.
 -- EJ_SelectInstance/EJ_SelectEncounter/EJ_SetLootFilter/EJ_SetDifficulty
 -- all mutate GLOBAL shared Encounter Journal state (see
 -- reference_ai_vault_addon_knowledge) -- if the player has the real
 -- Encounter Journal window open, driving these could make it visibly
--- jump to a different boss. Caching per itemId means this only happens
--- once per item for the whole session, not on every hover.
+-- jump to a different boss. Successful lookups are cached per requested
+-- track, so another rank cannot reuse the first rank's link. Missing EJ data
+-- is not cached because the client can populate it between two hovers.
 local liveLinkCache = {}
+local hoveredRows = setmetatable({}, { __mode = "k" })
 
 -- Fetches itemId's REAL item link at its own source's correct difficulty
 -- via a live Encounter Journal query (C_EncounterJournal.GetLootInfoByIndex's
@@ -122,20 +134,62 @@ local liveLinkCache = {}
 -- and The Coiled Altar's item, both of which lost their on-equip effect
 -- description in our addon's tooltip specifically (not in the real
 -- Encounter Journal) before this fix.
-local function FetchLiveItemLink(itemId, trackBonusId)
-    if liveLinkCache[itemId] ~= nil then
-        return liveLinkCache[itemId] or nil
+local function TooltipMatchesRequestedLevel(link, ilvl, trackKey, trackRank)
+    if not ilvl or not trackKey or not trackRank then return false end
+    if not C_TooltipInfo or not C_TooltipInfo.GetHyperlink then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetHyperlink, link)
+    if not ok or not data or not data.lines then
+        return nil
+    end
+    if TooltipUtil and TooltipUtil.SurfaceArgs then
+        ok = pcall(TooltipUtil.SurfaceArgs, data)
+        if not ok then return nil end
+    end
+    local trackLabel = Where2GoLocale.TrackLabel(trackKey)
+    local sawIlvl, sawTrack, sawAnyTrack = false, false, false
+    for _, line in ipairs(data.lines) do
+        local text = line.leftText
+        if text then
+            if tonumber(text:match("(%d+)")) == ilvl then sawIlvl = true end
+            if text:find(trackLabel, 1, true) and text:find(trackRank .. "/", 1, true) then sawTrack = true end
+            for candidateKey in pairs(Where2GoTracks.UPGRADE_TRACKS) do
+                local candidateLabel = Where2GoLocale.TrackLabel(candidateKey)
+                if text:find(candidateLabel, 1, true) and text:find("%d+/%d+") then
+                    sawAnyTrack = true
+                    break
+                end
+            end
+        end
+    end
+    local track = Where2GoTracks.UPGRADE_TRACKS[trackKey]
+    local regularRankCount = track and track.ilvls and #track.ilvls or 6
+    if sawIlvl and (sawTrack or trackRank > regularRankCount) then return true end
+    if sawAnyTrack then return false end
+    return nil
+end
+
+local function FetchLiveItemLink(itemId, trackBonusId, ilvl, trackKey, trackRank)
+    if not ilvl or not trackKey or not trackRank then
+        return nil
+    end
+    local itemCache = liveLinkCache[itemId]
+    if itemCache and itemCache[trackBonusId] ~= nil then
+        return itemCache[trackBonusId] or nil
     end
 
     local source = GetItemSource(itemId)
-    if not source or not EJ_SelectInstance or not C_EncounterJournal then
-        liveLinkCache[itemId] = false
+    if not source then
         return nil
     end
 
     EnsureEncounterJournalLoaded()
-    EJ_SetDifficulty(source.isRaid and EJ_MYTHIC_RAID_DIFFICULTY or EJ_MYTHIC_KEYSTONE_DIFFICULTY)
+    if not EJ_SetDifficulty or not EJ_SelectInstance or not EJ_SelectEncounter
+        or not EJ_SetLootFilter or not EJ_GetNumLoot or not C_EncounterJournal
+        or not C_EncounterJournal.GetLootInfoByIndex then
+        return nil
+    end
     EJ_SelectInstance(source.instanceId)
+    EJ_SetDifficulty(source.isRaid and EJ_MYTHIC_RAID_DIFFICULTY or EJ_MYTHIC_KEYSTONE_DIFFICULTY)
     EJ_SelectEncounter(source.bossId)
     EJ_SetLootFilter(0, 0)
 
@@ -149,12 +203,38 @@ local function FetchLiveItemLink(itemId, trackBonusId)
         end
     end
 
-    if link and not source.isRaid then
+    if link then
         link = ReplaceTrackBonusId(link, trackBonusId)
+        local validation = TooltipMatchesRequestedLevel(link, ilvl, trackKey, trackRank)
+        if validation then
+            itemCache = itemCache or {}
+            itemCache[trackBonusId] = link
+            liveLinkCache[itemId] = itemCache
+        elseif validation == false then
+            itemCache = itemCache or {}
+            itemCache[trackBonusId] = false
+            liveLinkCache[itemId] = itemCache
+            link = nil
+        else
+            link = nil
+        end
     end
-
-    liveLinkCache[itemId] = link or false
     return link
+end
+
+function Where2GoItemRow.GetLevelFromBonus(bonusId)
+    if type(bonusId) ~= "number" then
+        return
+    end
+    if bonusId == Where2GoRaidRanks.MYTH_FINAL_BONUS_ID then
+        return Where2GoRaidRanks.MYTH_FINAL_ILVL, "MYTH", Where2GoRaidRanks.MYTH_FINAL_RANK
+    end
+    for trackKey, track in pairs(Where2GoTracks.UPGRADE_TRACKS) do
+        local rank = bonusId and bonusId - track.bonusIdStart + 1
+        if rank and rank >= 1 and rank <= #track.ilvls then
+            return track.ilvls[rank], trackKey, rank
+        end
+    end
 end
 
 -- Builds the icon+name+summary sub-widgets on a fresh row frame. Callers
@@ -214,7 +294,7 @@ end
 --
 -- Cold-item-cache items show a placeholder icon/name. Both windows refresh
 -- their existing rows after relevant item-cache events while visible.
-function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId)
+function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId, trackKey, trackRank)
     local name, _, quality = C_Item.GetItemInfo(itemId)
     local icon = C_Item.GetItemIconByID(itemId)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -231,19 +311,19 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId)
         end
     end
     local statText = #statLabels > 0 and table.concat(statLabels, "/") or ""
-    if ilvl and statText ~= "" then
-        row.summary:SetText(ilvl .. " · " .. statText)
-    elseif ilvl then
-        row.summary:SetText(tostring(ilvl))
-    else
-        row.summary:SetText(statText)
-    end
+    local _, _, _, equipLoc = C_Item.GetItemInfoInstant(itemId)
+    local slot = Where2GoConstants and Where2GoConstants.EQUIPLOC_TO_SLOT
+        and Where2GoConstants.EQUIPLOC_TO_SLOT[equipLoc]
+    local summaryParts = {}
+    if slot then table.insert(summaryParts, Where2GoLocale.SlotLabel(slot)) end
+    if ilvl then table.insert(summaryParts, tostring(ilvl)) end
+    if statText ~= "" then table.insert(summaryParts, statText) end
+    row.summary:SetText(table.concat(summaryParts, " · "))
 
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function(self)
+    local function ShowTooltip(self)
         self.highlight:Show()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        local liveLink = bonusId and FetchLiveItemLink(itemId, bonusId)
+        local liveLink = bonusId and FetchLiveItemLink(itemId, bonusId, ilvl, trackKey, trackRank)
         if liveLink then
             GameTooltip:SetHyperlink(liveLink)
         elseif bonusId then
@@ -259,9 +339,19 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId)
             GameTooltip:AddLine(sourceLabel, 0.6, 0.6, 0.6)
         end
         GameTooltip:Show()
+    end
+
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", function(self)
+        hoveredRows[self] = true
+        ShowTooltip(self)
     end)
     row:SetScript("OnLeave", function(self)
+        hoveredRows[self] = nil
         self.highlight:Hide()
         GameTooltip:Hide()
     end)
+    local tooltipVisible = hoveredRows[row]
+    if GameTooltip and GameTooltip.IsOwned then tooltipVisible = GameTooltip:IsOwned(row) end
+    if tooltipVisible then ShowTooltip(row) end
 end

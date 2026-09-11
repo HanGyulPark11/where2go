@@ -169,6 +169,33 @@ function WowUI.New()
         return rawget(self, "height")
     end
 
+    function frameMethods:GetLeft()
+        return rawget(self, "left") or 0
+    end
+
+    function frameMethods:GetRight()
+        return rawget(self, "right") or (self:GetLeft() + (self:GetWidth() or 0))
+    end
+
+    function frameMethods:GetTop()
+        return rawget(self, "top") or (self:GetBottom() + (self:GetHeight() or 0))
+    end
+
+    function frameMethods:GetBottom()
+        return rawget(self, "bottom") or 0
+    end
+
+    function frameMethods:GetEffectiveScale()
+        return rawget(self, "effectiveScale") or 1
+    end
+
+    function frameMethods:GetPoint(index)
+        local point = self.points[index or 1]
+        if point then
+            return unpack(point)
+        end
+    end
+
     function frameMethods:SetParent(parent)
         self.parent = parent
     end
@@ -195,6 +222,10 @@ function WowUI.New()
 
     function frameMethods:RegisterForDrag(...)
         self.dragButtons = { ... }
+    end
+
+    function frameMethods:RegisterForClicks(...)
+        self.clickButtons = { ... }
     end
 
     function frameMethods:RegisterEvent(event)
