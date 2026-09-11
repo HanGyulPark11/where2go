@@ -147,9 +147,9 @@ local function newScenario(options)
     }
 end
 
--- Break caught: encounter-journal links can arrive at Champion rank even when
--- the recommendation calls for Myth, and caching either that link or a
--- temporary miss by item alone makes later hovers show the wrong tooltip.
+-- Break caught: hovering a row can mutate Encounter Journal selection, ordinary
+-- item links can inherit effect bonuses, static effect variants can omit or
+-- reorder their bonuses, or a pooled hovered row can retain its old tooltip.
 do
     local env = WowUI.New()
     env:InstallGlobals()
@@ -166,22 +166,9 @@ do
     Where2GoTracks = { UPGRADE_TRACKS = {
         CHAMPION = { bonusIdStart = 12833 },
         HERO = { bonusIdStart = 12841 },
-        MYTH = { bonusIdStart = 12849 },
+        MYTH = { bonusIdStart = 12849, ilvls = { 318, 321, 324, 328, 331, 334 } },
     } }
-    Where2GoRaidRanks = { MYTH_FINAL_BONUS_ID = 13848 }
-    Where2GoSources = {
-        DUNGEONS = { { instanceId = 1, encounters = {
-            { bossId = 11, itemIds = { 501 } },
-            { bossId = 12, itemIds = { 502 } },
-            { bossId = 13, itemIds = { 503 } },
-            { bossId = 14, itemIds = { 270164 } },
-            { bossId = 15, itemIds = { 268258 } },
-            { bossId = 16, itemIds = { 504 } },
-        } } },
-        RAIDS = { { instanceId = 2, encounters = {
-            { bossId = 21, itemIds = { 500 } },
-        } } },
-    }
+    Where2GoRaidRanks = { MYTH_FINAL_BONUS_ID = 13848, MYTH_FINAL_ILVL = 344, MYTH_FINAL_RANK = 9 }
     C_Item = {
         GetItemInfo = function(itemId) return "Item " .. itemId, nil, 1 end,
         GetItemInfoInstant = function(itemId) return itemId, nil, nil, "INVTYPE_HEAD" end,
@@ -204,53 +191,43 @@ do
         Hide = function() end,
     }
 
-    local encounter
-    local ejCalls = {}
-    local retryCalls = 0
-    local conflictCalls = 0
-    EJ_SetDifficulty = function() table.insert(ejCalls, "difficulty") end
-    EJ_SelectInstance = function() table.insert(ejCalls, "instance") end
-    EJ_SelectEncounter = function(bossId) encounter = bossId end
-    EJ_SetLootFilter = function() end
-    EJ_GetNumLoot = function() return 1 end
-    C_EncounterJournal = {
-        GetLootInfoByIndex = function()
-            if encounter == 12 then
-                retryCalls = retryCalls + 1
-                if retryCalls == 1 then return nil end
-            end
-            if encounter == 14 then conflictCalls = conflictCalls + 1 end
-            local itemId = encounter == 21 and 500 or (encounter == 11 and 501
-                or (encounter == 13 and 503 or (encounter == 14 and 270164
-                    or (encounter == 15 and 268258 or (encounter == 16 and 504 or 502)))))
-            return {
-                itemID = itemId,
-                link = "item:" .. itemId .. ":0:0:0:0:0:0:0:0:0:0:1:2:12835:777:2:42:43",
-            }
-        end,
-    }
+    local function forbiddenEJCall()
+        error("ItemRow must never call Encounter Journal APIs")
+    end
+    EJ_SetDifficulty = forbiddenEJCall
+    EJ_SelectInstance = forbiddenEJCall
+    EJ_SelectEncounter = forbiddenEJCall
+    EJ_SetLootFilter = forbiddenEJCall
+    EJ_GetNumLoot = forbiddenEJCall
+    C_EncounterJournal = { GetLootInfoByIndex = forbiddenEJCall }
+    C_AddOns = { LoadAddOn = forbiddenEJCall }
+    LoadAddOn = forbiddenEJCall
 
+    dofile("Where2Go/Core/ItemLinkBonuses.lua")
     dofile("Where2Go/UI/ItemRow.lua")
-    local validationRetryCalls = 0
     C_TooltipInfo = {
         GetHyperlink = function(link)
-            if link:find("item:504:", 1, true) then
-                validationRetryCalls = validationRetryCalls + 1
-                if validationRetryCalls == 1 then return nil end
+            if link:find("item:268253:", 1, true) then
+                return { lines = {
+                    { args = { "Item Level 344" } },
+                    { args = { "Myth 9/6" } },
+                } }
             end
-            local isConflict = link:find("item:270164:", 1, true) and link:find(":777:", 1, true)
-            if link:find("item:503:", 1, true) and link:find(":13848", 1, true) then
+            if link:find("item:268265:", 1, true) then
                 return { lines = {
                     { args = { "Item Level 344" } },
                     { args = { "Mythic" } },
                 } }
             end
-            local ilvl, track = "Item Level 321", "Myth 2/6"
-            if link:find(":12843", 1, true) then ilvl, track = "Item Level 311", "Hero 3/6" end
-            if link:find(":12849", 1, true) then ilvl, track = "Item Level 318", "Myth 1/6" end
+            if link:find("item:271876:", 1, true) then
+                return { lines = {
+                    { args = { "Item Level 344" } },
+                    { args = { "Myth 9/6" } },
+                } }
+            end
             return { lines = {
-                { leftText = isConflict and "Item Level 308" or ilvl },
-                { leftText = isConflict and "Champion 2/6" or track },
+                { leftText = "Item Level 321" },
+                { leftText = "Champion 2/6" },
             } }
         end,
     }
@@ -276,64 +253,78 @@ do
     end
 
     assert(hover(270164, 12850, 321, "MYTH", 2) == "item:270164:0:0:0:0:0:0:0:0:0:0:0:1:12850",
-        "Gebbo's Bottomless Bag must fall back to the canonical Myth 2/6 link when C_TooltipInfo renders the corrected EJ link as Champion 2/6")
-    assert(hover(270164, 12850, 321, "MYTH", 2) == "item:270164:0:0:0:0:0:0:0:0:0:0:0:1:12850"
-            and conflictCalls == 1,
-        "a definitive tooltip conflict should be cached so later hovers do not mutate Encounter Journal again")
-    assert(ejCalls[1] == "instance" and ejCalls[2] == "difficulty",
-        "Encounter Journal must select the instance before setting difficulty")
-    assert(hover(268258, 12850, 321, "MYTH", 2) == "item:268258:0:0:0:0:0:0:0:0:0:0:1:2:777:12850:2:42:43",
-        "Boots of the Reckless Wayfarer must retain a validated complete Encounter Journal link and its non-track bonus")
-
-    local expectedRaid = "item:500:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43"
-    assert(hover(500, 12849, 318, "MYTH", 1) == expectedRaid,
-        "a raid tooltip must replace an Encounter Journal Champion track with the requested Myth track and preserve its remaining fields")
-
-    assert(hover(501, 12843, 311, "HERO", 3) == "item:501:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43",
-        "the first requested rank should be represented in the live tooltip")
-    assert(hover(501, 12849, 318, "MYTH", 1) == "item:501:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43",
-        "a second requested rank for the same item must not reuse the first cached track")
-
-    assert(hover(501, 99999) == "item:501:0:0:0:0:0:0:0:0:0:0:0:1:99999",
-        "a bonus without recoverable level and track metadata must use the canonical link rather than an unvalidated full link")
-
-    assert(hover(503, 13848, 344, "MYTH", 9) == "item:503:0:0:0:0:0:0:0:0:0:0:1:2:777:13848:2:42:43",
-        "a special final-boss rank should retain the full link when surfaced tooltip data confirms its unique item level")
+        "ordinary Gebbo tooltip must use exactly its Myth 2/6 track-only link without Encounter Journal")
+    assert(hover(268258, 12850, 321, "MYTH", 2) == "item:268258:0:0:0:0:0:0:0:0:0:0:0:1:12850",
+        "ordinary Boots tooltip must use exactly its Myth 2/6 track-only link without Encounter Journal")
+    assert(hover(268253, 13848, 344, "MYTH", 9) == "item:268253:0:0:0:0:0:0:0:0:0:0:0:5:6652:13662:13334:13696:13848",
+        "the final-boss static variant must preserve ordered extra bonuses before its production Myth 9/6 track")
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:4:13335:13668:13987:13848",
+        "a special Myth 9/6 static variant must accept exact item level plus Mythic metadata without a numeric rank")
+    assert(hover(271876, 13848, 344, "MYTH", 9) == "item:271876:0:0:0:0:0:0:0:0:0:0:0:3:13335:13846:13848",
+        "Awoken Dreadfang Cuirass must retain its ordered static bonuses before its Myth 9/6 track")
     assert(surfaceCalls > 0, "tooltip validation must surface structured C_TooltipInfo line arguments")
 
-    assert(hover(502, 12843, 311, "HERO", 3) == "item:502:0:0:0:0:0:0:0:0:0:0:0:1:12843",
-        "a transient Encounter Journal miss should use the synthetic fallback for that hover")
-    assert(hover(502, 12843, 311, "HERO", 3) == "item:502:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43" and retryCalls == 2,
-        "a transient Encounter Journal miss must retry later and preserve real non-track bonuses when it succeeds")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "Item Level 308" }, { leftText = "Champion 2/6" },
+    } } end
+    assert(hover(268253, 13848, 344, "MYTH", 9) == "item:268253:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a static variant with conflicting tooltip metadata must fall back to its canonical track-only link")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "Item Level 344" }, { leftText = "Myth 9/6" }, { leftText = "Champion 2/6" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "any explicit conflicting numeric track must override a matching final-rank line")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "Item Level 344" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a final-rank static variant without plain Mythic metadata must use the canonical track-only link")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "Item Level 344" }, { leftText = "Heroic" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a final-rank static variant with the wrong plain track metadata must use the canonical track-only link")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "344 Armor" }, { leftText = "Mythic" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a final-rank static variant must reject an unrelated matching number without item-level metadata")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "Item Level 344" }, { leftText = "Myth 8/6" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a final-rank static variant with the same track at the wrong numeric rank must use the canonical track-only link")
+    C_TooltipInfo.GetHyperlink = function() return nil end
+    assert(hover(268265, 12850, 321, "MYTH", 2) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:12850",
+        "a static variant with unavailable tooltip metadata must fall back to its canonical track-only link")
 
-    assert(hover(504, 12843, 311, "HERO", 3) == "item:504:0:0:0:0:0:0:0:0:0:0:0:1:12843",
-        "temporarily unavailable tooltip metadata should use the canonical fallback for that hover")
-    assert(hover(504, 12843, 311, "HERO", 3) == "item:504:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43"
-            and validationRetryCalls == 2,
-        "temporarily unavailable tooltip metadata must be retried so a later hover can preserve the validated full link")
+    ITEM_LEVEL = "아이템 레벨 %d"
+    Where2GoLocale.TrackLabel = function(trackKey)
+        return ({ MYTH = "신화", HERO = "영웅", CHAMPION = "챔피언" })[trackKey] or trackKey
+    end
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "아이템 레벨 344" }, { leftText = "신화" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:4:13335:13668:13987:13848",
+        "a Korean final-rank tooltip with exact item level and plain Myth metadata must retain the static link")
+    C_TooltipInfo.GetHyperlink = function() return { lines = {
+        { leftText = "아이템 레벨 344" }, { leftText = "챔피언 2/6" },
+    } } end
+    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:1:13848",
+        "a Korean final-rank tooltip with an explicit Champion conflict must use the canonical track-only link")
+    ITEM_LEVEL = nil
+    Where2GoLocale.TrackLabel = function(trackKey)
+        return ({ MYTH = "Myth", HERO = "Hero", CHAMPION = "Champion" })[trackKey] or trackKey
+    end
 
-    local reusedRow = itemRow(501, 12843, 311, "HERO", 3)
+    C_TooltipInfo.GetHyperlink = function(link)
+        return { lines = { { leftText = "Item Level 321" }, { leftText = "Myth 2/6" } } }
+    end
+    local reusedRow = itemRow(270164, 12850, 321, "MYTH", 2)
     env:RunScript(reusedRow, "OnEnter")
     Where2GoItemRow.Populate(reusedRow, 268258, 321, nil, 12850, "MYTH", 2)
-    assert(GameTooltip.link == "item:268258:0:0:0:0:0:0:0:0:0:0:1:2:777:12850:2:42:43",
+    assert(GameTooltip.link == "item:268258:0:0:0:0:0:0:0:0:0:0:0:1:12850",
         "repopulating a hovered pooled row must immediately replace the old item's visible tooltip")
-
-    local loadCalls = 0
-    EJ_SelectInstance = nil
-    C_EncounterJournal = nil
-    C_AddOns = { LoadAddOn = function()
-        loadCalls = loadCalls + 1
-        EJ_SetDifficulty = function() end
-        EJ_SelectInstance = function() end
-        EJ_SelectEncounter = function(bossId) encounter = bossId end
-        EJ_SetLootFilter = function() end
-        EJ_GetNumLoot = function() return 1 end
-        C_EncounterJournal = { GetLootInfoByIndex = function()
-            return { itemID = 503, link = "item:503:0:0:0:0:0:0:0:0:0:0:1:2:12835:777:2:42:43" }
-        end }
-    end }
-    assert(hover(503, 12849, 318, "MYTH", 1) == "item:503:0:0:0:0:0:0:0:0:0:0:1:2:777:12849:2:42:43" and loadCalls == 1,
-        "the first hover should load Encounter Journal before checking its APIs and preserve the real link metadata")
 end
 
 -- Break caught: the ownership exclusion control either changes only one

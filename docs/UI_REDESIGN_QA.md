@@ -21,7 +21,7 @@ secure-frame behavior or API/template compatibility in a running client.
 
 ## Live-client acceptance checklist
 
-Status: passed by user confirmation on 2026-09-11.
+Status: the original checklist was passed by user confirmation on 2026-09-11. Targeted live-client QA for the static synthetic tooltip behavior was passed by user confirmation on 2026-09-12.
 
 1. Open the dungeon finder, raid finder and premade-group tabs. The small panel
    appears beside the finder; closing the finder hides the panel without closing
@@ -71,25 +71,33 @@ Status: passed by user confirmation on 2026-09-11.
     268258). Confirm the last two show Myth 2/6 at item level 321 rather than
     Champion 2/6.
     Confirm each tooltip matches the row's calculated track and level rather
-    than a stale Champion 3/6 link. In Drop mode, Mythic raid bosses 1–6 must
+    than a stale Champion 3/6 link. For Silken Voodoo Drape, Aqirbane
+    Reliquary (268265), and Awoken Dreadfang Cuirass (271876), confirm the
+    effect/context tooltip text remains present when their static synthetic
+    variants validate. Aqirbane Reliquary may report item level 344 and
+    `Mythic` without a numeric `9/6`; confirm that exact final-rank case keeps
+    the full static link. When tooltip metadata is unavailable or conflicts,
+    confirm the canonical track-only tooltip remains correct.
+    Confirm hovering never changes the open Encounter Journal's selection or
+    loot view. In Drop mode, Mythic raid bosses 1–6 must
     retain their direct 1/6, 2/6, or 3/6 levels and the final two must show
     Myth 9/6 (344). In Voidcore mode, bosses 1–6 must show Myth 6/6 (334) and
     the final two must show Myth 9/6 (344). Re-hover after a cold-cache miss
-    and confirm the live link resolves without losing non-track item effects.
+    and confirm the canonical synthetic link remains correct.
     Verify the browser results, saved preferences, and recommendation-card rows
     show localized slot · item level · fixed secondary stats; rows with no
     fixed secondary stats must end after item level.
 
 ## Scope and carried limitations
 
-- Automated tests do not perform live-client acceptance checks; the checklist
-  above was completed separately in the running client and confirmed by the user.
-- ItemRow's live-link lookup can change Encounter Journal selection and filters
-  on the first uncached hover. It retains a corrected Encounter Journal link only when
-  C_TooltipInfo reports the requested item level and track/rank; a metadata
-  mismatch or missing expected metadata uses the canonical synthetic link.
-  Successful results and definitive mismatches are cached per item and requested
-  rank; transient misses retry on a later hover.
+- Automated tests do not perform live-client acceptance checks; the original
+  checklist and the targeted static-tooltip checks in item 11 were completed
+  separately in the running client and confirmed by the user.
+- ItemRow uses a canonical synthetic link from the calculated track bonus. Only
+  the three static effect/context variants in `ItemLinkBonuses.lua` can add
+  non-track bonuses, after `C_TooltipInfo` confirms the requested level and
+  track metadata, including the documented final-rank exception. This behavior
+  passed targeted live-client verification on 2026-09-12.
 - Voidcore reward-event compatibility still needs a real roll verification as
   recorded in the existing TODO. The UI does not claim complete historical data.
 - Existing source names remain data-owned English strings. Addon labels are

@@ -11,6 +11,7 @@
 | Where2Go/Core/VoidcacheIds.lua | data | Voidcache source identifiers. | voidcacheids_spec.lua |
 | Where2Go/Core/SpecEligibilityData.lua | data | Generated eligibility data. | specEligibilityData_spec.lua |
 | Where2Go/Core/ItemStats.lua | data | Imported item stats. | itemstats_spec.lua |
+| Where2Go/Core/ItemLinkBonuses.lua | data | Curated non-track bonuses for tooltip effect/context variants. | itemlinkbonuses_spec.lua |
 | Where2Go/Core/ItemBrowser.lua | pure | Pool filtering and sorting. | itembrowser_spec.lua |
 | Where2Go/Core/Selection.lua | pure | Staged-item selection. | selection_spec.lua |
 | Where2Go/Core/Preferences.lua | pure | Preferred lists, undo, subscribers. | preferences_spec.lua |
@@ -24,7 +25,7 @@
 | Where2Go/Core/Equipment.lua | wow-api | Equipped-item lookup, carried ownership and filtering mode. | equipment_spec.lua |
 | Where2Go/Core/Init.lua | wow-api | Addon initialization and commands. | toc_spec.lua |
 | Where2Go/UI/Theme.lua | wow-api | Shared frame helpers. | panel_spec.lua |
-| Where2Go/UI/ItemRow.lua | wow-api | Item widgets and tooltips. | panel_spec.lua |
+| Where2Go/UI/ItemRow.lua | wow-api | Item widgets and synthetic tracked tooltips. | panel_spec.lua |
 | Where2Go/UI/Panel.lua | wow-api | Recommendation panel. | panel_spec.lua |
 | Where2Go/UI/BrowserPanel.lua | wow-api | Item browser panel. | browserpanel_spec.lua |
 

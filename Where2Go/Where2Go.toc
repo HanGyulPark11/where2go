@@ -13,6 +13,7 @@ Core\Sources.lua
 Core\VoidcacheIds.lua
 Core\SpecEligibilityData.lua
 Core\ItemStats.lua
+Core\ItemLinkBonuses.lua
 Core\ItemBrowser.lua
 Core\Selection.lua
 Core\Preferences.lua

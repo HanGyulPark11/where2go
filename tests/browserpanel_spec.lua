@@ -69,6 +69,7 @@ local function run()
         GetMythicPlusIlvl = function() return 311, "HERO", 3, 12843 end,
     }
     dofile("Where2Go/UI/Theme.lua")
+    dofile("Where2Go/Core/ItemLinkBonuses.lua")
     dofile("Where2Go/UI/ItemRow.lua")
     dofile("Where2Go/UI/BrowserPanel.lua")
     assert(type(Where2GoBrowserPanel.Show) == "function", "management must show rather than toggle")
@@ -110,17 +111,9 @@ local function run()
         for field in (value .. separator):gmatch("(.-)" .. separator) do table.insert(fields, field) end
         return unpack(fields)
     end
-    EJ_SelectInstance = function() end
-    EJ_SetDifficulty = function() end
-    EJ_SelectEncounter = function() end
-    EJ_SetLootFilter = function() end
-    EJ_GetNumLoot = function() return 1 end
-    C_EncounterJournal = { GetLootInfoByIndex = function()
-        return { itemID = 1, link = "item:1:0:0:0:0:0:0:0:0:0:0:1:2:12835:777:2:42:43" }
-    end }
     env:RunScript(resultRow(1), "OnEnter")
-    assert(GameTooltip.link == "item:1:0:0:0:0:0:0:0:0:0:0:1:2:777:12843:2:42:43",
-        "browser result hovers must pass their calculated track and rank so a validated full EJ link retains non-track bonuses")
+    assert(GameTooltip.link == "item:1:0:0:0:0:0:0:0:0:0:0:0:1:12843",
+        "browser result hovers must use their calculated track-only synthetic link")
     dofile("Where2Go/Core/Ranking.lua")
     local snapshotCalls = 0
     local actualHasOwnedAtLeast = Where2GoEquipment.HasOwnedAtLeast
