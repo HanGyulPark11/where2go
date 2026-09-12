@@ -10,11 +10,11 @@ First run a fresh read-only review. For example:
 .\tools\harness\Invoke-ClaudeReview.ps1 -PromptPath .harness\task\prompt.md -TaskId task -Files AGENTS.md,docs\CODEMAP.md -Model sonnet
 ```
 
-The runner has no internal wall-clock timeout. It waits for Claude to finish
-and still fails on a nonzero process exit, an API error response, or malformed
-review JSON. An operator may stop the parent process externally when needed.
+The runner defaults to `-TimeoutSeconds 900` and `-MaxBudgetUsd 3.0`; both bounds must be positive and can be adjusted per review. It uses Claude `stream-json` output with verbose partial messages and terminates the Windows process tree when the wall-clock deadline expires.
 
-It supplies both `--tools` and `--allowedTools` with only `Read`, `Glob`, and `Grep`; the installed CLI accepts these flags, and a real invocation completed with that restriction. The adapter validates Claude's outer response and the review JSON, which may optionally be enclosed in one Markdown code fence, then writes raw and normalized results. Evidence records both the requested model and the single model reported by Claude when available; model independence uses the reported model. A failed CLI, authentication, quota, parser, or schema result is not review evidence.
+Each run incrementally appends stdout events to `claude-stream.jsonl` and stderr to `claude-stderr.log` under its task scratch directory. Failure writes `failure.json` with a machine-readable `reason` (`harness`, `timeout`, `process`, `api`, or `parser`) and never writes `review.json`; partial diagnostics remain available. Successful runs require exactly one final `type=result` stream event with `is_error: false`. The final review accepts a bare JSON object, one enclosing JSON fence, or explanatory prose followed by one final JSON fence; ambiguous or malformed content is rejected. The runner supplies a JSON schema for `status` and `findings`, then retains the existing status, model, baseline, and file-hash evidence fields.
+
+It supplies both `--tools` and `--allowedTools` with only `Read`, `Glob`, and `Grep`, ignores inherited MCP servers through an empty strict MCP configuration, and keeps `--no-session-persistence`. A Claude CLI, authentication, quota, API, timeout, or parser failure is not review evidence. Start a separate independent Sol review after such a failure; do not use Claude's `--fallback-model` as a substitute for that review path.
 
 After review, create the state-bound manifest, then verify it:
 

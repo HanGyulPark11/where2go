@@ -4,6 +4,15 @@ $harnessRoot = Join-Path $PSScriptRoot '..\..\tools\harness'
 $reviewScript = Join-Path $harnessRoot 'Invoke-ClaudeReview.ps1'
 $gateScript = Join-Path $harnessRoot 'Complete-Task.ps1'
 $manifestScript = Join-Path $harnessRoot 'New-CompletionManifest.ps1'
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+
+function Invoke-ClaudeReviewProcess([string[]] $ReviewArguments) {
+    $stdout = Join-Path $TestDrive ([guid]::NewGuid().ToString('N') + '.stdout')
+    $stderr = Join-Path $TestDrive ([guid]::NewGuid().ToString('N') + '.stderr')
+    $process = Start-Process -FilePath $windowsPowerShell -ArgumentList (@('-NoProfile', '-File', $reviewScript) + $ReviewArguments) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -Wait -PassThru -NoNewWindow
+    if ($process.ExitCode -ne 0) { Write-Host (Get-Content -Raw $stdout); Write-Host (Get-Content -Raw $stderr) }
+    return $process.ExitCode
+}
 
 function New-HarnessRepository {
     $repo = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
@@ -276,20 +285,60 @@ Describe 'Complete-Task' {
 }
 
 Describe 'Invoke-ClaudeReview' {
-    It 'writes approved evidence from a valid fake Claude response' {
+    It 'writes approved evidence from structured output and passes bounded stream flags' {
         $repo = New-HarnessRepository
         $prompt = Join-Path $repo 'prompt.txt'
         Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
-        $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@echo {"result":"{\"status\":\"approved\",\"findings\":[]}","modelUsage":{"claude-sonnet-4-6":{"inputTokens":1}}}'
+        $fake = Join-Path $repo '.harness\fake-claude.exe'
+        $fakeSource = @'
+using System;
+using System.IO;
+using System.Text;
+public static class FakeClaude {
+    public static int Main(string[] args) {
+        Console.OutputEncoding = new UTF8Encoding(false);
+        File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "args.txt"), args);
+        Console.WriteLine("{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"progress " + ((char)0x2014) + " ongoing\"}]}}");
+        Console.Error.WriteLine("diagnostic-progress");
+        Console.WriteLine("{\"type\":\"result\",\"is_error\":false,\"result\":\"\",\"structured_output\":{\"status\":\"approved\",\"findings\":[]},\"modelUsage\":{\"claude-sonnet-4-6\":{\"inputTokens\":1}}}");
+        return 0;
+    }
+}
+'@
+        $fakeSourcePath = Join-Path $repo '.harness\fake-claude.cs'
+        $compilerPath = Join-Path $repo '.harness\compile-fake.ps1'
+        Set-Content -NoNewline -Encoding UTF8 -Path $fakeSourcePath -Value $fakeSource
+        Set-Content -NoNewline -Path $compilerPath -Value 'param([string] $SourcePath, [string] $OutputPath); $ErrorActionPreference = ''Stop''; Add-Type -Path $SourcePath -OutputAssembly $OutputPath -OutputType ConsoleApplication'
+        & $windowsPowerShell -NoProfile -File $compilerPath -SourcePath $fakeSourcePath -OutputPath $fake
+        $LASTEXITCODE | Should Be 0
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
-        $LASTEXITCODE | Should Be 0
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'test-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake, '-MaxBudgetUsd', '4.5')
+        $exitCode | Should Be 0
         $evidence = Get-Content -Raw (Join-Path $scratch 'test-task\review.json') | ConvertFrom-Json
         $evidence.status | Should Be 'approved'
         $evidence.model | Should Be 'claude-sonnet-4-6'
         $evidence.requestedModel | Should Be 'sonnet'
+        (Get-Content -Raw (Join-Path $scratch 'test-task\claude-stream.jsonl')) | Should Match '"type":"assistant"'
+        (Get-Content -Raw (Join-Path $scratch 'test-task\claude-stderr.log')) | Should Match 'diagnostic-progress'
+        $arguments = @(Get-Content (Join-Path $repo '.harness\args.txt'))
+        ($arguments -contains '--output-format') | Should Be $true
+        ($arguments -contains 'stream-json') | Should Be $true
+        ($arguments -contains '--verbose') | Should Be $true
+        ($arguments -contains '--include-partial-messages') | Should Be $true
+        ($arguments -contains '--max-budget-usd') | Should Be $true
+        ($arguments -contains '4.5') | Should Be $true
+        ($arguments -contains '--strict-mcp-config') | Should Be $true
+        $toolsIndex = [Array]::IndexOf($arguments, '--tools')
+        $arguments[$toolsIndex + 1] | Should Be 'Read,Glob,Grep'
+        $allowedToolsIndex = [Array]::IndexOf($arguments, '--allowedTools')
+        $arguments[$allowedToolsIndex + 1] | Should Be 'Read,Glob,Grep'
+        ($arguments -contains '--no-session-persistence') | Should Be $true
+        $schemaIndex = [Array]::IndexOf($arguments, '--json-schema')
+        { $arguments[$schemaIndex + 1] | ConvertFrom-Json | Out-Null } | Should Not Throw
+        $mcpIndex = [Array]::IndexOf($arguments, '--mcp-config')
+        $mcpConfig = $arguments[$mcpIndex + 1] | ConvertFrom-Json
+        @($mcpConfig.mcpServers.PSObject.Properties).Count | Should Be 0
     }
 
     It 'rejects malformed Claude results' {
@@ -297,10 +346,10 @@ Describe 'Invoke-ClaudeReview' {
         $prompt = Join-Path $repo 'prompt.txt'
         Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@echo {"result":"not json"}'
+        Set-Content -Path $fake -Value '@echo {"type":"result","is_error":false,"result":"not json"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
-        ($LASTEXITCODE -ne 0) | Should Be $true
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'test-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', (Join-Path $repo '.harness'), '-ClaudePath', $fake)
+        ($exitCode -ne 0) | Should Be $true
     }
 
     It 'accepts one enclosing JSON code fence in a valid Claude result' {
@@ -308,12 +357,12 @@ Describe 'Invoke-ClaudeReview' {
         $prompt = Join-Path $repo 'prompt.txt'
         Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@echo {"result":"```json\n{\"status\":\"approved\",\"findings\":[]}\n```"}'
+        Set-Content -Path $fake -Value '@echo {"type":"result","is_error":false,"result":"```json\n{\"status\":\"approved\",\"findings\":[]}\n```"}'
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'fenced-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake)
 
-        $LASTEXITCODE | Should Be 0
+        $exitCode | Should Be 0
         (Get-Content -Raw (Join-Path $scratch 'fenced-task\review.json') | ConvertFrom-Json).status | Should Be 'approved'
     }
 
@@ -322,11 +371,11 @@ Describe 'Invoke-ClaudeReview' {
         $prompt = Join-Path $repo 'prompt.txt'
         Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@echo {"result":"```json\nnot json\n```"}'
+        Set-Content -Path $fake -Value '@echo {"type":"result","is_error":false,"result":"```json\nnot json\n```"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId fenced-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'fenced-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', (Join-Path $repo '.harness'), '-ClaudePath', $fake)
 
-        ($LASTEXITCODE -ne 0) | Should Be $true
+        ($exitCode -ne 0) | Should Be $true
         (Test-Path -LiteralPath (Join-Path $repo '.harness\fenced-task\review.json')) | Should Be $false
     }
 
@@ -335,10 +384,25 @@ Describe 'Invoke-ClaudeReview' {
         $prompt = Join-Path $repo '.harness\prompt.txt'
         Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content -Path $fake -Value '@echo {"is_error":true,"result":"{\"status\":\"approved\",\"findings\":[]}"}'
+        Set-Content -Path $fake -Value '@echo {"type":"result","is_error":true,"result":"{\"status\":\"approved\",\"findings\":[]}"}'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
-        ($LASTEXITCODE -ne 0) | Should Be $true
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'test-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', (Join-Path $repo '.harness'), '-ClaudePath', $fake)
+        ($exitCode -ne 0) | Should Be $true
+    }
+
+    It 'requires an explicit Boolean false is_error value' {
+        $repo = New-HarnessRepository
+        $prompt = Join-Path $repo 'prompt.txt'
+        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
+        $fake = Join-Path $repo '.harness\fake-claude.cmd'
+        Set-Content -Path $fake -Value '@echo {"type":"result","result":"{\"status\":\"approved\",\"findings\":[]}"}'
+        $scratch = Join-Path $repo '.harness'
+
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'missing-error-flag', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake)
+
+        ($exitCode -ne 0) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'missing-error-flag\failure.json') | ConvertFrom-Json).reason | Should Be 'api'
+        (Test-Path -LiteralPath (Join-Path $scratch 'missing-error-flag\review.json')) | Should Be $false
     }
 
     It 'returns failure when Claude exits unsuccessfully' {
@@ -348,12 +412,117 @@ Describe 'Invoke-ClaudeReview' {
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
         Set-Content -Path $fake -Value '@exit /b 7'
 
-        & $reviewScript -PromptPath $prompt -TaskId test-task -Files selected.txt -RepoPath $repo -ScratchRoot (Join-Path $repo '.harness') -ClaudePath $fake 2>$null
-        ($LASTEXITCODE -ne 0) | Should Be $true
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'test-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', (Join-Path $repo '.harness'), '-ClaudePath', $fake)
+        ($exitCode -ne 0) | Should Be $true
     }
 
-    It 'has no internal Claude review timeout parameter' {
-        (Get-Command $reviewScript).Parameters.ContainsKey('TimeoutSeconds') | Should Be $false
+    It 'times out, terminates the process tree, and retains partial diagnostics' {
+        $repo = New-HarnessRepository
+        $prompt = Join-Path $repo 'prompt.txt'
+        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
+        $fake = Join-Path $repo '.harness\fake-claude.cmd'
+        Set-Content -Path $fake -Value @(
+            '@echo off'
+            'echo {"type":"assistant","message":{"content":[{"type":"text","text":"partial"}]}}'
+            'echo partial-diagnostic 1>&2'
+            'start "" /b powershell.exe -NoProfile -Command "Set-Content -NoNewline -LiteralPath ''%~dp0child.pid'' -Value $PID; Start-Sleep -Seconds 30"'
+            'ping 127.0.0.1 -n 2 >nul'
+            'ping 127.0.0.1 -n 30 >nul'
+        )
+        $scratch = Join-Path $repo '.harness'
+
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'timeout-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake, '-TimeoutSeconds', '2')
+
+        ($exitCode -ne 0) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'timeout-task\claude-stream.jsonl')) | Should Match 'partial'
+        (Get-Content -Raw (Join-Path $scratch 'timeout-task\claude-stderr.log')) | Should Match 'partial-diagnostic'
+        (Get-Content -Raw (Join-Path $scratch 'timeout-task\failure.json') | ConvertFrom-Json).reason | Should Be 'timeout'
+        (Test-Path -LiteralPath (Join-Path $scratch 'timeout-task\review.json')) | Should Be $false
+        $childPid = [int](Get-Content -Raw (Join-Path $repo '.harness\child.pid'))
+        (Get-Process -Id $childPid -ErrorAction SilentlyContinue) | Should BeNullOrEmpty
+    }
+
+    It 'makes partial stdout visible before Claude exits' {
+        $repo = New-HarnessRepository
+        $prompt = Join-Path $repo 'prompt.txt'
+        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
+        $fake = Join-Path $repo '.harness\fake-claude.cmd'
+        Set-Content -Path $fake -Value @(
+            '@echo off'
+            'echo {"type":"assistant","message":{"content":[{"type":"text","text":"visible-now"}]}}'
+            'ping 127.0.0.1 -n 6 >nul'
+            'echo {"type":"result","is_error":false,"result":"{\"status\":\"approved\",\"findings\":[]}"}'
+        )
+        $scratch = Join-Path $repo '.harness'
+        $runnerOut = Join-Path $scratch 'runner.stdout'
+        $runnerErr = Join-Path $scratch 'runner.stderr'
+        $arguments = @('-NoProfile', '-File', $reviewScript, '-PromptPath', $prompt, '-TaskId', 'live-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake)
+        $runner = Start-Process -FilePath $windowsPowerShell -ArgumentList $arguments -RedirectStandardOutput $runnerOut -RedirectStandardError $runnerErr -PassThru -NoNewWindow
+        $stream = Join-Path $scratch 'live-task\claude-stream.jsonl'
+        $deadline = [DateTime]::UtcNow.AddSeconds(4)
+        $visible = $false
+        while ([DateTime]::UtcNow -lt $deadline -and -not $visible) {
+            Start-Sleep -Milliseconds 100
+            if (Test-Path -LiteralPath $stream) { $visible = (Get-Content -Raw -LiteralPath $stream) -match 'visible-now' }
+        }
+
+        $visible | Should Be $true
+        $runner.HasExited | Should Be $false
+        $runner.WaitForExit(10000) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'live-task\review.json') | ConvertFrom-Json).status | Should Be 'approved'
+    }
+
+    It 'records parser failure without producing review evidence for malformed final output' {
+        $repo = New-HarnessRepository
+        $prompt = Join-Path $repo 'prompt.txt'
+        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
+        $fake = Join-Path $repo '.harness\fake-claude.cmd'
+        Set-Content -Path $fake -Value '@echo {"type":"result","is_error":false,"result":"explanation ```json\n{\"status\":\"approved\",\"findings\":[]}\n``` trailing text"}'
+        $scratch = Join-Path $repo '.harness'
+
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'malformed-task', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake)
+
+        ($exitCode -ne 0) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'malformed-task\failure.json') | ConvertFrom-Json).reason | Should Be 'parser'
+        (Test-Path -LiteralPath (Join-Path $scratch 'malformed-task\review.json')) | Should Be $false
+    }
+
+    It 'exposes positive timeout and budget bounds with documented defaults' {
+        $parameters = (Get-Command $reviewScript).Parameters
+        $parameters.ContainsKey('TimeoutSeconds') | Should Be $true
+        $parameters.ContainsKey('MaxBudgetUsd') | Should Be $true
+
+        $repo = New-HarnessRepository
+        $prompt = Join-Path $repo 'prompt.txt'
+        Set-Content -NoNewline -Path $prompt -Value 'Review this bounded task.'
+        $scratch = Join-Path $repo '.harness'
+        $taskScratch = Join-Path $scratch 'invalid-bounds'
+        New-Item -ItemType Directory -Force -Path $taskScratch | Out-Null
+        Set-Content -NoNewline -Path (Join-Path $taskScratch 'review.json') -Value '{"status":"approved"}'
+        Set-Content -NoNewline -Path (Join-Path $taskScratch 'claude-stream.jsonl') -Value 'stale stream'
+        Set-Content -NoNewline -Path (Join-Path $taskScratch 'claude-stderr.log') -Value 'stale stderr'
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'invalid-bounds', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', 'missing', '-TimeoutSeconds', '0')
+        ($exitCode -ne 0) | Should Be $true
+        (Test-Path -LiteralPath (Join-Path $taskScratch 'review.json')) | Should Be $false
+        (Test-Path -LiteralPath (Join-Path $taskScratch 'claude-stream.jsonl')) | Should Be $false
+        (Test-Path -LiteralPath (Join-Path $taskScratch 'claude-stderr.log')) | Should Be $false
+        (Get-Content -Raw (Join-Path $taskScratch 'failure.json') | ConvertFrom-Json).reason | Should Be 'harness'
+
+        $nanExit = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'nan-budget', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', 'missing', '-MaxBudgetUsd', 'NaN')
+        ($nanExit -ne 0) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'nan-budget\failure.json') | ConvertFrom-Json).message | Should Match 'MaxBudgetUsd'
+
+        $tinyExit = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'tiny-budget', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', 'missing', '-MaxBudgetUsd', '0.0000001')
+        ($tinyExit -ne 0) | Should Be $true
+        (Get-Content -Raw (Join-Path $scratch 'tiny-budget\failure.json') | ConvertFrom-Json).message | Should Match 'MaxBudgetUsd'
+
+        $bindingScratch = Join-Path $scratch 'invalid-text-bound'
+        New-Item -ItemType Directory -Force -Path $bindingScratch | Out-Null
+        Set-Content -NoNewline -Path (Join-Path $bindingScratch 'review.json') -Value '{"status":"approved"}'
+        $textExit = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'invalid-text-bound', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', 'missing', '-TimeoutSeconds', 'not-a-number')
+        ($textExit -ne 0) | Should Be $true
+        (Test-Path -LiteralPath (Join-Path $bindingScratch 'review.json')) | Should Be $false
+        (Get-Content -Raw (Join-Path $bindingScratch 'failure.json') | ConvertFrom-Json).reason | Should Be 'harness'
     }
 
     It 'carries an actual deletion through review, manifest, and commit' {
@@ -361,11 +530,11 @@ Describe 'Invoke-ClaudeReview' {
         $prompt = Join-Path $repo '.harness\prompt.txt'
         Set-Content -NoNewline -LiteralPath $prompt -Value 'Review the deletion.'
         $fake = Join-Path $repo '.harness\fake-claude.cmd'
-        Set-Content $fake '@echo {"result":"{\"status\":\"approved\",\"findings\":[]}"}'
+        Set-Content $fake '@echo {"type":"result","is_error":false,"result":"{\"status\":\"approved\",\"findings\":[]}"}'
         Remove-Item (Join-Path $repo 'selected.txt')
         $scratch = Join-Path $repo '.harness'
 
-        & $reviewScript -PromptPath $prompt -TaskId delete-pipeline -Files selected.txt -RepoPath $repo -ScratchRoot $scratch -ClaudePath $fake
+        $exitCode = Invoke-ClaudeReviewProcess @('-PromptPath', $prompt, '-TaskId', 'delete-pipeline', '-Files', 'selected.txt', '-RepoPath', $repo, '-ScratchRoot', $scratch, '-ClaudePath', $fake)
         $reviewPath = Join-Path $scratch 'delete-pipeline\review.json'
         $manifestPath = Join-Path $scratch 'delete-pipeline\completion.json'
         & $manifestScript -TaskId delete-pipeline -Files selected.txt -ImplementationModel terra -ReviewEvidencePath $reviewPath -DocumentationBy docs-owner -Checks git-head -OutputPath $manifestPath -RepoPath $repo

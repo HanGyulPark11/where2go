@@ -6,29 +6,31 @@ test routing. The open live work is `docs/UI_REDESIGN_QA.md` and real Voidcore
 `BONUS_ROLL_RESULT` confirmation. Historical statements below do not supersede
 current source or tests.
 
-## Open follow-up: Bound and instrument Claude review runs
+## Completed follow-up: Bound and instrument Claude review runs
 
-`tools/harness/Invoke-ClaudeReview.ps1` currently launches Claude Code with
-`--output-format json`, redirects stdout/stderr, and waits with an unbounded
-`Process.WaitForExit()`. The raw response is written only after the process
-exits, so a long model/tool run and a stalled remote request both appear as
+`tools/harness/Invoke-ClaudeReview.ps1` previously launched Claude Code with
+`--output-format json`, redirected stdout/stderr, and waited with an unbounded
+`Process.WaitForExit()`. The raw response was written only after the process
+exited, so a long model/tool run and a stalled remote request both appeared as
 silent indefinite hangs. The local Claude Code 2.1.69 installation and
 `claude.ai` authentication were healthy on 2026-09-12; a no-tool Sonnet smoke
 request completed in about six seconds, while a bounded repository review
-produced no output for several minutes and had to be interrupted.
+produced no output for several minutes and had to be interrupted. Its debug log
+stopped during inherited MCP startup; the bounded runner now uses an empty
+strict MCP configuration because review needs only local read tools.
 
-- [ ] Add a configurable wall-clock timeout and terminate the Claude process
+- [x] Add a configurable wall-clock timeout and terminate the Claude process
       tree when it expires.
-- [ ] Use `stream-json`/verbose output or equivalent incremental logging so the
+- [x] Use `stream-json`/verbose output or equivalent incremental logging so the
       harness records model and tool progress while the review is running.
-- [ ] Preserve partial stdout/stderr and record an explicit timeout/stall reason
+- [x] Preserve partial stdout/stderr and record an explicit timeout/stall reason
       instead of leaving an empty `claude-raw.json`.
-- [ ] Add a configurable `--max-budget-usd` bound and document when the Sol
+- [x] Add a configurable `--max-budget-usd` bound and document when the Sol
       review fallback should be used.
-- [ ] Keep the existing successful-review evidence contract: final status,
+- [x] Keep the existing successful-review evidence contract: final status,
       model identity, baseline commit, and reviewed file hashes must still be
       normalized into `review.json`.
-- [ ] Add harness tests for successful streamed completion, timeout cleanup,
+- [x] Add harness tests for successful streamed completion, timeout cleanup,
       malformed final output, and retained partial diagnostics.
 
 # Restart Checklist
