@@ -204,9 +204,20 @@ do
     LoadAddOn = forbiddenEJCall
 
     dofile("Where2Go/Core/ItemLinkBonuses.lua")
+    Where2GoItemLinkBonuses.TEMPLATES = {}
+    for _, itemId in ipairs({ 270164, 268258, 268253, 268265, 271876 }) do
+        Where2GoItemLinkBonuses.TEMPLATES[itemId] = string.format(
+            "item:%d:0:0:0:0:0:0:0:0:0:0:6:1:3524:1:28:7362:::::", itemId)
+    end
     dofile("Where2Go/UI/ItemRow.lua")
     C_TooltipInfo = {
         GetHyperlink = function(link)
+            if link:find("item:270164:", 1, true) or link:find("item:268258:", 1, true) then
+                return { lines = {
+                    { args = { "Item Level 321" } },
+                    { args = { "Myth 2/6" } },
+                } }
+            end
             if link:find("item:268253:", 1, true) then
                 return { lines = {
                     { args = { "Item Level 344" } },
@@ -252,16 +263,19 @@ do
         return GameTooltip.link
     end
 
-    assert(hover(270164, 12850, 321, "MYTH", 2) == "item:270164:0:0:0:0:0:0:0:0:0:0:0:1:12850",
-        "ordinary Gebbo tooltip must use exactly its Myth 2/6 track-only link without Encounter Journal")
-    assert(hover(268258, 12850, 321, "MYTH", 2) == "item:268258:0:0:0:0:0:0:0:0:0:0:0:1:12850",
-        "ordinary Boots tooltip must use exactly its Myth 2/6 track-only link without Encounter Journal")
-    assert(hover(268253, 13848, 344, "MYTH", 9) == "item:268253:0:0:0:0:0:0:0:0:0:0:0:5:6652:13662:13334:13696:13848",
-        "the final-boss static variant must preserve ordered extra bonuses before its production Myth 9/6 track")
-    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:4:13335:13668:13987:13848",
-        "a special Myth 9/6 static variant must accept exact item level plus Mythic metadata without a numeric rank")
-    assert(hover(271876, 13848, 344, "MYTH", 9) == "item:271876:0:0:0:0:0:0:0:0:0:0:0:3:13335:13846:13848",
-        "Awoken Dreadfang Cuirass must retain its ordered static bonuses before its Myth 9/6 track")
+    local function contextualLink(itemId, bonusId)
+        return string.format("item:%d:0:0:0:0:0:0:0:0:0:0:6:2:3524:%d:1:28:7362:::::", itemId, bonusId)
+    end
+    assert(hover(270164, 12850, 321, "MYTH", 2) == contextualLink(270164, 12850),
+        "ordinary Gebbo tooltip must retain its Encounter Journal context with the requested Myth rank")
+    assert(hover(268258, 12850, 321, "MYTH", 2) == contextualLink(268258, 12850),
+        "ordinary Boots tooltip must retain its Encounter Journal context with the requested Myth rank")
+    assert(hover(268253, 13848, 344, "MYTH", 9) == contextualLink(268253, 13848),
+        "the final-boss item must combine its Encounter Journal context with the production Myth 9/6 track")
+    assert(hover(268265, 13848, 344, "MYTH", 9) == contextualLink(268265, 13848),
+        "a special Myth 9/6 item must retain its Encounter Journal context")
+    assert(hover(271876, 13848, 344, "MYTH", 9) == contextualLink(271876, 13848),
+        "Awoken Dreadfang Cuirass must retain its Encounter Journal context")
     assert(surfaceCalls > 0, "tooltip validation must surface structured C_TooltipInfo line arguments")
 
     C_TooltipInfo.GetHyperlink = function() return { lines = {
@@ -305,8 +319,8 @@ do
     C_TooltipInfo.GetHyperlink = function() return { lines = {
         { leftText = "아이템 레벨 344" }, { leftText = "신화" },
     } } end
-    assert(hover(268265, 13848, 344, "MYTH", 9) == "item:268265:0:0:0:0:0:0:0:0:0:0:0:4:13335:13668:13987:13848",
-        "a Korean final-rank tooltip with exact item level and plain Myth metadata must retain the static link")
+    assert(hover(268265, 13848, 344, "MYTH", 9) == contextualLink(268265, 13848),
+        "a Korean final-rank tooltip with exact item level and plain Myth metadata must retain the contextual link")
     C_TooltipInfo.GetHyperlink = function() return { lines = {
         { leftText = "아이템 레벨 344" }, { leftText = "챔피언 2/6" },
     } } end
@@ -323,7 +337,7 @@ do
     local reusedRow = itemRow(270164, 12850, 321, "MYTH", 2)
     env:RunScript(reusedRow, "OnEnter")
     Where2GoItemRow.Populate(reusedRow, 268258, 321, nil, 12850, "MYTH", 2)
-    assert(GameTooltip.link == "item:268258:0:0:0:0:0:0:0:0:0:0:0:1:12850",
+    assert(GameTooltip.link == contextualLink(268258, 12850),
         "repopulating a hovered pooled row must immediately replace the old item's visible tooltip")
 end
 

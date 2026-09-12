@@ -1,3 +1,5 @@
+-- luacheck: globals Where2GoItemLinkBonusScan
+
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:SetScript("OnEvent", function(self, _event, loadedAddonName)
@@ -165,6 +167,79 @@ local function HandleGenspecCommand(args)
     end
 end
 
+local function CountEntries(tableValue)
+    local count = 0
+    for _ in pairs(tableValue or {}) do
+        count = count + 1
+    end
+    return count
+end
+
+local _lastGenlinksProgress
+
+local function HandleGenlinksProgress(sourceName, encounterName, current, total, finishedReason, export)
+    if finishedReason == "COMPLETE" then
+        _lastGenlinksProgress = nil
+        local conflictCount = CountEntries(export.conflicts)
+        local missingCount = #export.missingItems
+        local unresolvedCount = #export.unresolvedLinkItems
+        print(string.format(
+            "Where2Go: genlinks scan complete -- %d/%d tracked items observed, %d conflict(s), %d unresolved full link(s), %d missing item(s).",
+            export.observedItemCount, export.trackedItemCount, conflictCount, unresolvedCount, missingCount))
+        if conflictCount > 0 or unresolvedCount > 0 or missingCount > 0 then
+            print("Where2Go: do not apply this export yet; inspect Where2GoDB.itemLinkBonusesExport diagnostics and rescan after correcting the cause.")
+        else
+            print("Where2Go: log out to flush SavedVariables, then run tools/data-prep/convert_item_link_bonuses.py and review its staged output.")
+        end
+    elseif finishedReason == "ABORTED_ERROR" then
+        _lastGenlinksProgress = nil
+        print("Where2Go: genlinks scan aborted due to an error -- see the error log.")
+    elseif current and total then
+        local progress = string.format("%d/%d", current, total)
+        if progress ~= _lastGenlinksProgress then
+            _lastGenlinksProgress = progress
+            print(string.format("Where2Go: genlinks scanning %s -- %s (%s)...", sourceName or "?", encounterName or "?", progress))
+        end
+    end
+end
+
+local function HandleGenlinksCommand(args)
+    local action = args[2]
+    if action == "reset" then
+        if not Where2GoDB.itemLinkBonusesExport then
+            print("Where2Go: no genlinks export data to reset.")
+            return
+        end
+        Where2GoDB.itemLinkBonusesExport = nil
+        print("Where2Go: genlinks export data cleared.")
+        return
+    end
+    if action then
+        print("Usage: /where2go genlinks [reset]")
+        return
+    end
+
+    print("Where2Go: scanning every tracked encounter's full item links via the Encounter Journal. This changes the Journal selection while it runs.")
+    Where2GoItemLinkBonusScan.SetProgressCallback("genlinks", HandleGenlinksProgress)
+    local ok, reason = Where2GoItemLinkBonusScan.Start()
+    if ok then
+        return
+    end
+    if reason == "STALE_SEASON" then
+        print(string.format(
+            "Where2Go: existing genlinks export is from a previous season (%s) -- run '/where2go genlinks reset' first.",
+            Where2GoDB.itemLinkBonusesExport.seasonVersion))
+    elseif reason == "RUNNING" then
+        print("Where2Go: a genlinks scan is already running.")
+    elseif reason == "COMBAT" then
+        print("Where2Go: cannot start a genlinks scan while in combat.")
+    elseif reason == "EJ_LOAD_FAILED" then
+        print("Where2Go: genlinks could not load the Blizzard_EncounterJournal addon -- open the in-game Dungeon Journal (default key: Shift+J) once, then run this again.")
+    elseif reason == "ERROR" then
+        print("Where2Go: genlinks scan aborted due to an error -- see the error log.")
+    end
+end
+
 SLASH_WHERE2GO1 = "/where2go"
 SLASH_WHERE2GO2 = "/w2g"
 SlashCmdList["WHERE2GO"] = function(msg)
@@ -178,9 +253,11 @@ SlashCmdList["WHERE2GO"] = function(msg)
         Where2GoBrowserPanel.Toggle()
     elseif subcommand == "genspec" then
         HandleGenspecCommand(args)
+    elseif subcommand == "genlinks" then
+        HandleGenlinksCommand(args)
     elseif not subcommand or subcommand == "" then
         Where2Go_TogglePanel()
     else
-        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset]")
+        print("Where2Go: unknown command. Usage: /where2go, /where2go pref add|remove|list ..., /where2go compare, /where2go browse, /where2go genspec [reset], /where2go genlinks [reset]")
     end
 end

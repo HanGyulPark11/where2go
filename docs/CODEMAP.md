@@ -11,7 +11,7 @@
 | Where2Go/Core/VoidcacheIds.lua | data | Voidcache source identifiers. | voidcacheids_spec.lua |
 | Where2Go/Core/SpecEligibilityData.lua | data | Generated eligibility data. | specEligibilityData_spec.lua |
 | Where2Go/Core/ItemStats.lua | data | Imported item stats. | itemstats_spec.lua |
-| Where2Go/Core/ItemLinkBonuses.lua | data | Curated non-track bonuses for tooltip effect/context variants. | itemlinkbonuses_spec.lua |
+| Where2Go/Core/ItemLinkBonuses.lua | data | Generated full-link templates preserving Encounter Journal tooltip context. | itemlinkbonuses_spec.lua |
 | Where2Go/Core/ItemBrowser.lua | pure | Pool filtering and sorting. | itembrowser_spec.lua |
 | Where2Go/Core/Selection.lua | pure | Staged-item selection. | selection_spec.lua |
 | Where2Go/Core/Preferences.lua | pure | Preferred lists, undo, subscribers. | preferences_spec.lua |
@@ -21,6 +21,7 @@
 | Where2Go/Core/VoidcoreHistory.lua | wow-api | Voidcore event history. | voidcorehistory_spec.lua |
 | Where2Go/Core/VoidcoreDrop.lua | wow-api | Voidcore candidates and Great Vault-equivalent raid reward metadata. | voidcoredrop_spec.lua, browserpanel_spec.lua (integration) |
 | Where2Go/Core/SpecEligibilityScan.lua | wow-api | Encounter Journal scan/export. | specEligibilityScan_spec.lua |
+| Where2Go/Core/ItemLinkBonusScan.lua | wow-api | Prewarmed per-encounter EJ full-link scan with raw-link, conflict, and unresolved-link diagnostics. | itemLinkBonusScan_spec.lua |
 | Where2Go/Core/Compare.lua | pure | Candidate comparison. | compare_spec.lua |
 | Where2Go/Core/Equipment.lua | wow-api | Equipped-item lookup, carried ownership and filtering mode. | equipment_spec.lua |
 | Where2Go/Core/Init.lua | wow-api | Addon initialization and commands. | toc_spec.lua |

@@ -21,7 +21,7 @@ secure-frame behavior or API/template compatibility in a running client.
 
 ## Live-client acceptance checklist
 
-Status: the original checklist was passed by user confirmation on 2026-09-11. Targeted live-client QA for the static synthetic tooltip behavior was passed by user confirmation on 2026-09-12.
+Status: the original checklist was passed by user confirmation on 2026-09-11. Targeted live-client QA for generated Encounter Journal tooltip templates was passed by user confirmation on 2026-09-12.
 
 1. Open the dungeon finder, raid finder and premade-group tabs. The small panel
    appears beside the finder; closing the finder hides the panel without closing
@@ -64,19 +64,14 @@ Status: the original checklist was passed by user confirmation on 2026-09-11. Ta
     unrelated item must leave the second-slot upgrade visible; two distinct
     usable equal-or-better items may suppress it. Check compatible weapon
     types and unavailable item data without false exclusions.
-11. Hover the five reported examples in recommendation rows: Ferocious
-    Scaleboots from Sszorak, Silken Voodoo Drape (item 268253) from The Coiled
-    Altar, the mail waist item from Atroxus in Voidscar Arena, Gebbo's
-    Bottomless Bag (item 270164), and Boots of the Reckless Wayfarer (item
-    268258). Confirm the last two show Myth 2/6 at item level 321 rather than
-    Champion 2/6.
-    Confirm each tooltip matches the row's calculated track and level rather
-    than a stale Champion 3/6 link. For Silken Voodoo Drape, Aqirbane
-    Reliquary (268265), and Awoken Dreadfang Cuirass (271876), confirm the
-    effect/context tooltip text remains present when their static synthetic
-    variants validate. Aqirbane Reliquary may report item level 344 and
-    `Mythic` without a numeric `9/6`; confirm that exact final-rank case keeps
-    the full static link. When tooltip metadata is unavailable or conflicts,
+11. Hover Gebbo's Bottomless Bag (item 270164) and Boots of the Reckless
+    Wayfarer (item 268258) in recommendation rows. Confirm both show Myth 2/6
+    at item level 321 rather than Champion 2/6. For Silken Voodoo Drape (item
+    268253), Aqirbane Reliquary (268265), and Awoken Dreadfang Cuirass (271876),
+    confirm the special-effect text remains present through the generated
+    Encounter Journal template. Aqirbane Reliquary may report item level 344
+    and `Mythic` without a numeric `9/6`; confirm that exact final-rank case
+    keeps the contextual link. When tooltip metadata is unavailable or conflicts,
     confirm the canonical track-only tooltip remains correct.
     Confirm hovering never changes the open Encounter Journal's selection or
     loot view. In Drop mode, Mythic raid bosses 1–6 must
@@ -91,13 +86,14 @@ Status: the original checklist was passed by user confirmation on 2026-09-11. Ta
 ## Scope and carried limitations
 
 - Automated tests do not perform live-client acceptance checks; the original
-  checklist and the targeted static-tooltip checks in item 11 were completed
+  checklist and the targeted generated-template tooltip checks in item 11 were completed
   separately in the running client and confirmed by the user.
-- ItemRow uses a canonical synthetic link from the calculated track bonus. Only
-  the three static effect/context variants in `ItemLinkBonuses.lua` can add
-  non-track bonuses, after `C_TooltipInfo` confirms the requested level and
-  track metadata, including the documented final-rank exception. This behavior
-  passed targeted live-client verification on 2026-09-12.
+- ItemRow uses the generated Encounter Journal template for each tracked item,
+  inserts the calculated track bonus, and accepts it only after `C_TooltipInfo`
+  confirms the requested level and track metadata. The generated replacement
+  passed live-client verification on 2026-09-12: the two reported ordinary
+  items showed Myth 2/6 at item level 321, and the three checked special-effect
+  items retained their effect text.
 - Voidcore reward-event compatibility still needs a real roll verification as
   recorded in the existing TODO. The UI does not claim complete historical data.
 - Existing source names remain data-owned English strings. Addon labels are

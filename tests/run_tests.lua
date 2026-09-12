@@ -11,6 +11,7 @@ local specs = {
     "tests/specEligibilityData_spec.lua",
     "tests/itemstats_spec.lua",
     "tests/itemlinkbonuses_spec.lua",
+    "tests/itemLinkBonusScan_spec.lua",
     "tests/raidranks_spec.lua",
     "tests/ranking_spec.lua",
     "tests/voidcorehistory_spec.lua",

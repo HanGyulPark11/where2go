@@ -50,3 +50,39 @@ Review the printed diff. If it looks correct, copy
 See `docs/SEASON_CHECKLIST.md` for the full season-changeover procedure,
 covering both scripts above plus the manual steps for `Tracks.lua` and
 `RaidRanks.lua` that neither script covers.
+
+## `convert_item_link_bonuses.py`
+
+`convert_item_link_bonuses.py` turns the reviewed account-wide export produced
+by `/w2g genlinks` into committed full item-link templates. It uses only
+the Python standard library, reads the SavedVariables file supplied as its
+argument, and writes only `scratch/ItemLinkBonuses.lua.new`; it never edits
+`Where2Go/Core/ItemLinkBonuses.lua`.
+
+First run `/w2g genlinks reset`, then `/w2g genlinks` in a live client. The
+scan prewarms its tracked item IDs, then selects EJ difficulty and the instance
+once per source before its encounter loop. Let it finish without conflicts,
+unresolved-full-link diagnostics, or missing-item diagnostics and log out fully
+so WoW flushes SavedVariables. From the repository root, run:
+
+```
+python tools/data-prep/convert_item_link_bonuses.py "C:\path\to\WTF\Account\<account>\SavedVariables\Where2Go.lua"
+```
+
+The converter rejects a stale season or unsupported schema, any conflict,
+unresolved full link, missing or incomplete tracked-item coverage, remaining
+upgrade-track IDs, duplicate bonus IDs, and conflicting templates for one item.
+It zeros character-specific link fields while preserving each Encounter
+Journal item context, residual-bonus order, modifier list, and trailing fields.
+At runtime `ItemRow` inserts the requested upgrade-track bonus into that
+template. Review the printed diff and
+`tools/data-prep/scratch/ItemLinkBonuses.lua.new`; only then manually copy its
+contents into `Where2Go/Core/ItemLinkBonuses.lua`, run the Lua tests and lint,
+and complete the live-client checklist.
+
+For converter development, run its standard-library test suite from the
+repository root:
+
+```
+python tools/data-prep/test_convert_item_link_bonuses.py
+```

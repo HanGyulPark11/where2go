@@ -33,7 +33,7 @@ earlier ones are done.
    data (see
    `docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md`'s
    Data Sourcing section) — it's a manual per-entry Wowhead lookup. As of
-   Phase 8b, this file is no longer a dependency of step 5's
+   Phase 8b, this file is no longer a dependency of step 8's
    spec-eligibility regeneration (that now drives the Encounter Journal
    directly off `Sources.lua`'s own `instanceId`/`bossId` fields). It's
    kept only for a separate, not-yet-built feature (backfilling a
@@ -50,48 +50,50 @@ earlier ones are done.
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
 
-5. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** As of Phase
-   8b this is independent of step 4 — it drives Blizzard's Encounter
-   Journal loot filter directly off the just-updated `Sources.lua`'s own
-   `instanceId`/`bossId` fields, not `VoidcacheIds.lua`. First, run
-   `/where2go genspec reset` unconditionally, even if you don't think any
-   leftover export data exists — the staleness guard that would otherwise
-   catch this can't help you here: it compares
-   `Where2GoDB.specEligibilityExport.seasonVersion` against
-   `Where2GoConstants.SEASON_LABEL`, but `SEASON_LABEL` isn't bumped to
-   the new season until step 9, several steps after this one. At this
-   point in the checklist a leftover export from last season still has a
-   `seasonVersion` that matches the still-current `SEASON_LABEL`, so the
-   guard sees no staleness and won't warn — genspec would otherwise
-   silently merge into last season's stale `bySpec` data. Then log into
-   any one character (any class) and run `/where2go genspec` once — it
-   now scans every class and spec in the game in a single pass (not one
-   pass per class), merging the result into
-   `Where2GoDB.specEligibilityExport`.
+5. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
+   no API equivalent. Determine each boss's relative item-level rank and any
+   above-cap final-boss track. Update `RAID_BOSS_RANK`,
+   `MYTH_FINAL_BOSS_IDS`, `MYTH_FINAL_ILVL`, `MYTH_FINAL_RANK`, and
+   `MYTH_FINAL_BONUS_ID`; re-confirm the Mythic+ key+10-floor assumption.
 
-   A mid-season edit to `Sources.lua`'s item pools (e.g. a hotfixed item
-   addition) also requires re-running this step — a newly-added item has
-   no `BY_SPEC[specId]` entry yet, and absence means "ineligible", not
-   "unknown", until regenerated. Do **not** bump `SEASON_LABEL` to try to
-   force this: that field doesn't trigger anything here either, and
-   bumping it mid-season will trip `Where2GoDB.specEligibilityExport`'s
-   season-staleness guard and block `/where2go genspec` until a
-   `genspec reset` throws away any in-progress accumulated data.
+6. **Check `Where2Go/Core/Tracks.lua`.** Confirm each upgrade track's
+   `bonusIdStart` and `ilvls` array, since the next scan removes every bonus
+   ID these tables define.
 
-   Once scanned, log out to flush SavedVariables, open
-   `WTF/Account/<acct>/SavedVariables/Where2Go.lua`, and find the
-   `Where2GoDB.specEligibilityExport.bySpec` table. **Eyeball it before
-   copying anything**: every spec should have a plausible non-empty item
-   count (roughly similar across specs of the same class) — an
-   unexpectedly-empty spec is worth re-running before trusting it. Once
-   it looks right, hand-merge `bySpec`'s entries into
-   `Where2Go/Core/SpecEligibilityData.lua`'s `BY_SPEC` table (matching
-   this project's existing "human reviews the diff, never
-   auto-overwrite" convention for committed data files). See
-   `docs/superpowers/specs/2026-09-05-phase8b-ej-loot-filter-genspec-design.md`
-   for the full design rationale.
+7. **Update `Where2GoConstants.SEASON_LABEL`.** Set the new season label
+   before generating either SavedVariables export, so both converters reject
+   stale prior-season output.
 
-6. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
+8. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** Run
+   `/where2go genspec reset` unconditionally, then `/where2go genspec` once
+   on any character. The reset discards any old export, so updating the season
+   label first is safe. A mid-season `Sources.lua` edit also requires this
+   step. Log out, review `Where2GoDB.specEligibilityExport.bySpec` for
+   plausible non-empty per-spec coverage, then hand-merge it into
+   `Where2Go/Core/SpecEligibilityData.lua`.
+
+9. **Regenerate `Where2Go/Core/ItemLinkBonuses.lua`.** First run
+   `/w2g genlinks reset`, then `/w2g genlinks` on any character out of combat.
+   The scan prewarms tracked item IDs, then sets EJ difficulty and selects the
+   instance once per source before selecting each tracked encounter at Mythic
+   Keystone (dungeons, difficulty 8) or Mythic raid (raids, difficulty 16),
+   clearing the loot filter and reading full Encounter Journal item links.
+   Wait for zero conflicts, unresolved-full-link diagnostics, and missing-item
+   diagnostics, then log out fully. From the repository root, run:
+   ```
+   python tools/data-prep/convert_item_link_bonuses.py "C:\path\to\WTF\Account\<account>\SavedVariables\Where2Go.lua"
+   ```
+   The converter validates the season and schema, rejects conflicts,
+   unresolved full links, and incomplete/suspicious coverage, and writes only
+   `tools/data-prep/scratch/ItemLinkBonuses.lua.new`. Review the printed diff
+   and staged file before manually copying it into
+   `Where2Go/Core/ItemLinkBonuses.lua`. It normalizes character-specific fields
+   while preserving item context, residual-bonus order, modifiers, and the
+   remaining full-link tail for each tracked item; differing normalized links
+   for one item are a conflict. Do not apply a
+   diagnostic export; fix the source/EJ issue and rerun the scan.
+
+10. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
    updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
    needs regenerating too. See `tools/data-prep/README.md` for credential
    setup (same as step 2). From the repo root:
@@ -102,44 +104,18 @@ earlier ones are done.
    `tools/data-prep/scratch/ItemStats.lua.new`'s content into
    `Where2Go/Core/ItemStats.lua`.
 
-7. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
-   no API equivalent. For the new raid, determine each boss's relative
-   item-level rank (1-4) and whether any boss drops a special
-   above-normal-cap track (like Season 2's Myth-9/6 final bosses), the
-   same way `RaidRanks.lua`'s own comments describe doing it for Season 2
-   (e.g. checking a known dropped item's bonus ID against its item level
-   via `/where2go scanbonus` or an equivalent in-client check). Update
-   `RAID_BOSS_RANK`, `MYTH_FINAL_BOSS_IDS`, `MYTH_FINAL_ILVL`, and
-   `MYTH_FINAL_RANK` by hand to match. Also re-confirm the Mythic+
-   key+10-floor assumption (`MYTHIC_PLUS_TRACK_KEY` and
-   `MYTHIC_PLUS_TRACK_RANK`, documented in that file as an empirical
-   in-client measurement) still holds, and update those two by hand if
-   not.
-
-8. **Check `Where2Go/Core/Tracks.lua`.** Confirm whether the upgrade-track
-   bonus ID ranges (Veteran/Champion/Hero/Myth) changed this season —
-   Blizzard sometimes shifts these between seasons. Also check each
-   track's `ilvls = { ... }` array (the per-rank item levels), which
-   changes essentially every season. Update by hand if so.
-
-9. **Update `Where2GoConstants.SEASON_LABEL`.** In
-   `Where2Go/Core/Constants.lua`, update the `SEASON_LABEL` string (e.g.
-   `"Midnight Season 2"`) to name the new season. This is a simple
-   hand-edit, like the `RaidRanks.lua`/`Tracks.lua` steps above — there is
-   no API for it.
-
-10. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
+11. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
     check near the bottom of the file (currently asserting `RAIDS[2]` is
     "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
     Replace it with an equivalent spot-check for the new season's actual
     raid content, or remove it if no longer meaningful.
 
-11. **Run the full test suite and commit.**
+12. **Run the full test suite and commit.**
     ```
     "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
     ```
     Confirm all specs pass before committing the updated `Sources.lua`,
-    `ItemStats.lua`, `RaidRanks.lua`, `Tracks.lua`, `Constants.lua`,
-    `Where2Go/Core/SpecEligibilityData.lua`, `sources_spec.lua`, and (only
+   `ItemStats.lua`, `ItemLinkBonuses.lua`, `RaidRanks.lua`, `Tracks.lua`,
+   `Constants.lua`, `Where2Go/Core/SpecEligibilityData.lua`, `sources_spec.lua`, and (only
     if step 4 was actually performed this season) `Where2Go/Core/VoidcacheIds.lua`
     together.

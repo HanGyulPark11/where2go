@@ -6,6 +6,31 @@ test routing. The open live work is `docs/UI_REDESIGN_QA.md` and real Voidcore
 `BONUS_ROLL_RESULT` confirmation. Historical statements below do not supersede
 current source or tests.
 
+## Open follow-up: Bound and instrument Claude review runs
+
+`tools/harness/Invoke-ClaudeReview.ps1` currently launches Claude Code with
+`--output-format json`, redirects stdout/stderr, and waits with an unbounded
+`Process.WaitForExit()`. The raw response is written only after the process
+exits, so a long model/tool run and a stalled remote request both appear as
+silent indefinite hangs. The local Claude Code 2.1.69 installation and
+`claude.ai` authentication were healthy on 2026-09-12; a no-tool Sonnet smoke
+request completed in about six seconds, while a bounded repository review
+produced no output for several minutes and had to be interrupted.
+
+- [ ] Add a configurable wall-clock timeout and terminate the Claude process
+      tree when it expires.
+- [ ] Use `stream-json`/verbose output or equivalent incremental logging so the
+      harness records model and tool progress while the review is running.
+- [ ] Preserve partial stdout/stderr and record an explicit timeout/stall reason
+      instead of leaving an empty `claude-raw.json`.
+- [ ] Add a configurable `--max-budget-usd` bound and document when the Sol
+      review fallback should be used.
+- [ ] Keep the existing successful-review evidence contract: final status,
+      model identity, baseline commit, and reviewed file hashes must still be
+      normalized into `review.json`.
+- [ ] Add harness tests for successful streamed completion, timeout cleanup,
+      malformed final output, and retained partial diagnostics.
+
 # Restart Checklist
 
 - [x] Confirm the first supported WoW client version and season. Midnight

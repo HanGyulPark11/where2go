@@ -72,6 +72,37 @@ local function BuildSyntheticLink(itemId, trackBonusId, extraBonusIds)
     return string.format("item:%d:0:0:0:0:0:0:0:0:0:0:0:%d:%s", itemId, #bonusIds, table.concat(bonusIds, ":"))
 end
 
+local function BuildContextualLink(itemId, trackBonusId)
+    local template = Where2GoItemLinkBonuses.TEMPLATES and Where2GoItemLinkBonuses.TEMPLATES[itemId]
+    if type(template) ~= "string" then
+        return nil
+    end
+    local fields = {}
+    for field in (template .. ":"):gmatch("([^:]*):") do
+        table.insert(fields, field)
+    end
+    local templateItemId = tonumber(fields[2])
+    local bonusCount = tonumber(fields[14])
+    if fields[1] ~= "item" or templateItemId ~= itemId or not bonusCount
+        or bonusCount < 0 or bonusCount % 1 ~= 0 or #fields < 14 + bonusCount then
+        return nil
+    end
+
+    local rebuilt = {}
+    for index = 1, 14 do
+        rebuilt[index] = fields[index]
+    end
+    rebuilt[14] = tostring(bonusCount + 1)
+    for index = 1, bonusCount do
+        rebuilt[14 + index] = fields[14 + index]
+    end
+    table.insert(rebuilt, trackBonusId)
+    for index = 15 + bonusCount, #fields do
+        table.insert(rebuilt, fields[index])
+    end
+    return table.concat(rebuilt, ":")
+end
+
 function Where2GoItemRow.GetLevelFromBonus(bonusId)
     if type(bonusId) ~= "number" then
         return
@@ -175,8 +206,7 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId, track
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if bonusId then
             local canonicalLink = BuildSyntheticLink(itemId, bonusId)
-            local extraBonusIds = Where2GoItemLinkBonuses.EXTRA_BONUSES[itemId]
-            local fullLink = extraBonusIds and BuildSyntheticLink(itemId, bonusId, extraBonusIds)
+            local fullLink = BuildContextualLink(itemId, bonusId)
             if fullLink and TooltipMatchesRequestedLevel(fullLink, ilvl, trackKey, trackRank) then
                 GameTooltip:SetHyperlink(fullLink)
             else
