@@ -10,7 +10,7 @@ First run a fresh read-only review. For example:
 .\tools\harness\Invoke-ClaudeReview.ps1 -PromptPath .harness\task\prompt.md -TaskId task -Files AGENTS.md,docs\CODEMAP.md -Model sonnet
 ```
 
-The runner defaults to `-TimeoutSeconds 900` and `-MaxBudgetUsd 3.0`; both bounds must be positive and can be adjusted per review. It uses Claude `stream-json` output with verbose partial messages and terminates the Windows process tree when the wall-clock deadline expires.
+The runner defaults to `-TimeoutSeconds 1200` and `-MaxBudgetUsd 3.0`; both bounds must be positive and can be adjusted per review. It asks Claude to prioritize a final JSON decision over extended analysis, uses Claude `stream-json` output with verbose partial messages, and terminates the Windows process tree when the wall-clock deadline expires.
 
 Each run incrementally appends stdout events to `claude-stream.jsonl` and stderr to `claude-stderr.log` under its task scratch directory. Failure writes `failure.json` with a machine-readable `reason` (`harness`, `timeout`, `process`, `api`, or `parser`) and never writes `review.json`; partial diagnostics remain available. Successful runs require exactly one final `type=result` stream event with `is_error: false`. The final review accepts a bare JSON object, one enclosing JSON fence, or explanatory prose followed by one final JSON fence; ambiguous or malformed content is rejected. The runner supplies a JSON schema for `status` and `findings`, then retains the existing status, model, baseline, and file-hash evidence fields.
 

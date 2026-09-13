@@ -19,7 +19,7 @@ param(
     [string] $ScratchRoot = '.harness',
     [string] $ClaudePath = 'C:\Users\hangy\.local\bin\claude.exe',
     [string] $Model = 'sonnet',
-    [string] $TimeoutSeconds = '900',
+    [string] $TimeoutSeconds = '1200',
     [string] $MaxBudgetUsd = '3.0'
 )
 
@@ -95,7 +95,7 @@ try {
     if (-not [double]::TryParse($MaxBudgetUsd, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$maxBudgetValue) -or [double]::IsNaN($maxBudgetValue) -or [double]::IsInfinity($maxBudgetValue) -or $maxBudgetValue -lt 0.000001 -or $maxBudgetValue -gt 1000000) { throw 'MaxBudgetUsd must be a finite value from 0.000001 through 1000000.' }
     $repo = (Resolve-Path -LiteralPath $RepoPath).Path
     $reviewSchema = '{"type":"object","additionalProperties":false,"required":["status","findings"],"properties":{"status":{"enum":["approved","changes_requested"]},"findings":{"type":"array"}}}'
-    $prompt = (Get-Content -Raw -Encoding UTF8 -LiteralPath $PromptPath) + "`n`nReturn a review that satisfies this JSON Schema: $reviewSchema"
+    $prompt = (Get-Content -Raw -Encoding UTF8 -LiteralPath $PromptPath) + "`n`nPrioritize completing the review and returning the final JSON decision over extended analysis. Return exactly one final JSON object that satisfies this JSON Schema: $reviewSchema"
     if ($prompt.Length -gt 16000) { throw 'Prompt exceeds the 16000-character bound.' }
     if (-not (Test-Path -LiteralPath $ClaudePath -PathType Leaf)) { throw "Claude executable not found at '$ClaudePath'." }
     $baseline = (& git -C $repo rev-parse HEAD).Trim()

@@ -334,6 +334,8 @@ public static class FakeClaude {
         $allowedToolsIndex = [Array]::IndexOf($arguments, '--allowedTools')
         $arguments[$allowedToolsIndex + 1] | Should Be 'Read,Glob,Grep'
         ($arguments -contains '--no-session-persistence') | Should Be $true
+        $promptIndex = [Array]::IndexOf($arguments, '-p')
+        ($arguments -join "`n") | Should Match 'Prioritize completing the review and returning the final JSON decision over extended analysis'
         $schemaIndex = [Array]::IndexOf($arguments, '--json-schema')
         { $arguments[$schemaIndex + 1] | ConvertFrom-Json | Out-Null } | Should Not Throw
         $mcpIndex = [Array]::IndexOf($arguments, '--mcp-config')
@@ -491,6 +493,7 @@ public static class FakeClaude {
         $parameters = (Get-Command $reviewScript).Parameters
         $parameters.ContainsKey('TimeoutSeconds') | Should Be $true
         $parameters.ContainsKey('MaxBudgetUsd') | Should Be $true
+        (Get-Content -Raw $reviewScript) | Should Match '\$TimeoutSeconds = ''1200'''
 
         $repo = New-HarnessRepository
         $prompt = Join-Path $repo 'prompt.txt'
