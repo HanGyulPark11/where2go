@@ -10,6 +10,7 @@ local CARD_HEADER_HEIGHT = 60
 local ITEM_ROW_HEIGHT = 32
 local CARD_GAP = 6
 local PANEL_GAP = 8
+local SOURCE_FILTER_KINDS = { DUNGEONS = "dungeon", RAIDS = "raid" }
 
 local panelFrame
 local bodyFrame
@@ -20,10 +21,12 @@ local specText
 local summaryText
 local collapseButton
 local ownershipButton
+local sourceFilterButton
 local modeButtons = {}
 local cardPool = {}
 local expansionByContent = {}
 local currentMode = "DROP"
+local currentSourceFilter = "ALL"
 local hookedPVEFrame
 
 local LayoutCards
@@ -258,6 +261,28 @@ local function UpdateOwnershipButton()
     if ownershipButton then
         ownershipButton:SetText(L(OwnershipMode() == "SLOT" and "PANEL_OWNERSHIP_SLOT" or "PANEL_OWNERSHIP_ITEM"))
     end
+end
+
+local function UpdateSourceFilterButton()
+    if sourceFilterButton then
+        sourceFilterButton:SetText(L("PANEL_SOURCE_" .. currentSourceFilter))
+    end
+end
+
+local function MatchesSourceFilter(ranked)
+    return currentSourceFilter == "ALL" or ranked.kind == SOURCE_FILTER_KINDS[currentSourceFilter]
+end
+
+local function CycleSourceFilter()
+    if currentSourceFilter == "ALL" then
+        currentSourceFilter = "DUNGEONS"
+    elseif currentSourceFilter == "DUNGEONS" then
+        currentSourceFilter = "RAIDS"
+    else
+        currentSourceFilter = "ALL"
+    end
+    UpdateSourceFilterButton()
+    Where2GoPanel.Refresh()
 end
 
 local function AnchorStandalone()
@@ -513,6 +538,11 @@ local function CreatePanel()
     frame.ownershipButton = ownershipButton
     UpdateOwnershipButton()
 
+    sourceFilterButton = Where2GoTheme.Button(bodyFrame, "", 174, 22, CycleSourceFilter)
+    sourceFilterButton:SetPoint("LEFT", ownershipButton, "RIGHT", 6, 0)
+    frame.sourceFilterButton = sourceFilterButton
+    UpdateSourceFilterButton()
+
     summaryText:SetPoint("TOPLEFT", 0, -78)
     summaryText:SetPoint("RIGHT", bodyFrame, "RIGHT", 0, 0)
     summaryText:SetTextColor(unpack(Where2GoTheme.colors.muted))
@@ -572,12 +602,14 @@ function Where2GoPanel.Refresh()
     end
 
     local matches = {}
+    local visiblePreferredCount = 0
     for _, ranked in ipairs(results) do
-        if (ranked.targetCount or 0) > 0 then
+        if (ranked.targetCount or 0) > 0 and MatchesSourceFilter(ranked) then
             table.insert(matches, ranked)
+            visiblePreferredCount = visiblePreferredCount + ranked.targetCount
         end
     end
-    summaryText:SetText(string.format(L("PANEL_COUNT_SUMMARY"), preferredCount, #matches))
+    summaryText:SetText(string.format(L("PANEL_COUNT_SUMMARY"), visiblePreferredCount, #matches))
 
     if preferredCount == 0 then
         ShowEmpty(L("PANEL_NO_PREFERRED"))

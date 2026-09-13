@@ -8,5 +8,9 @@ The recommendation panel's ownership toggle switches the shared character rule
 between same-item and slot filtering and refreshes immediately. Bag/equipment
 events refresh visible recommendations; item-cache events retry comparisons
 when metadata arrives. The saved preferred list is not modified by filtering.
+Its session-only source control cycles All, Dungeons, and Raids beside the
+ownership toggle, filters both Drop and Voidcore rankings by `ranked.kind`,
+survives mode changes, resets to All on reload, and summarizes only visible
+filtered targets.
 
 `tests/helpers/wow_ui.lua` is a small frame double for panel specs. It supports automated lifecycle and interaction checks but cannot replace the current [two-window live UI checklist](../UI_REDESIGN_QA.md).

@@ -16,6 +16,14 @@ assert(Where2GoLocale.SlotLabel("HEAD") == "Head", "SlotLabel() should return th
 assert(Where2GoLocale.StatLabel("CRIT_RATING") == "Crit", "StatLabel() should return the enUS label by default")
 assert(Where2GoLocale.StatAbbrev("VERSATILITY") == "Vers", "StatAbbrev() should return the enUS abbreviation by default")
 assert(Where2GoLocale.TrackLabel("HERO") == "Hero", "TrackLabel() should return the enUS label by default")
+assert(Where2GoLocale.L("PANEL_SOURCE_ALL") == "Source: All", "the recommendation source filter should default to the All label")
+assert(Where2GoLocale.L("PANEL_SOURCE_DUNGEONS") == "Source: Dungeons", "the recommendation source filter should expose the Dungeons label")
+assert(Where2GoLocale.L("PANEL_SOURCE_RAIDS") == "Source: Raids", "the recommendation source filter should expose the Raids label")
+assert(Where2GoLocale.L("PANEL_NO_MATCHES") == "No matching targets remain for the selected source, specialization, and owned-gear filtering.",
+    "the no-match guidance should account for the selected source filter")
+assert(Where2GoLocale.STRINGS.koKR.PANEL_SOURCE_ALL == "출처: 전체", "the Korean All source label should match the approved wording")
+assert(Where2GoLocale.STRINGS.koKR.PANEL_SOURCE_DUNGEONS == "출처: 던전", "the Korean Dungeons source label should match the approved wording")
+assert(Where2GoLocale.STRINGS.koKR.PANEL_SOURCE_RAIDS == "출처: 레이드", "the Korean Raids source label should match the approved wording")
 assert(Where2GoLocale.L("NONEXISTENT_KEY_XYZ") == "NONEXISTENT_KEY_XYZ", "L() should fall back to the key itself when missing from every table")
 
 -- Coverage: every enUS key must have a koKR counterpart, so a forgotten

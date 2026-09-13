@@ -26,6 +26,9 @@ ranks content rather than recommending gear.
   exact item ID; Slot also compares usable gear for that slot. The setting is
   remembered per character and shared by Drop and Voidcore. Saved preferences
   stay intact. Bank and warband storage are not scanned.
+- Cycle the recommendation panel's **Source** control through **All**,
+  **Dungeons**, and **Raids**. It applies to Drop and Voidcore while the addon
+  is running, and resets to All after `/reload`.
 - `/w2g` still toggles standalone access to the recommendation panel.
 
 The ranking compares the share of preferred items in the eligible pool under

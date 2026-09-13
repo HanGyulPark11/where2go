@@ -15,8 +15,11 @@ local STRINGS = {
     PANEL_OWNERSHIP_ITEM = "Exclude: Same item",
     PANEL_OWNERSHIP_SLOT = "Exclude: Slot",
     PANEL_OWNERSHIP_HELP = "Exclude preferred gear you already own in equipped slots or regular bags. Same item compares its upgrade track first, then item level; Slot applies this to any item in the same slot.",
+    PANEL_SOURCE_ALL = "Source: All",
+    PANEL_SOURCE_DUNGEONS = "Source: Dungeons",
+    PANEL_SOURCE_RAIDS = "Source: Raids",
     PANEL_NO_PREFERRED = "Choose the items you want to see where to go next.",
-    PANEL_NO_MATCHES = "No matching targets remain after specialization and owned-gear filtering.",
+    PANEL_NO_MATCHES = "No matching targets remain for the selected source, specialization, and owned-gear filtering.",
     NO_SPEC_SELECTED = "Where2Go: no specialization selected.",
 }
 
@@ -377,6 +380,93 @@ do
     env:FireEvent("PLAYER_EQUIPMENT_CHANGED", 1, true)
     assert(scenario.rankCalls.VOIDCORE == voidCalls + 2,
         "bag and equipment events should each refresh the visible active ranking")
+end
+
+-- Break caught: recommendation source filtering can omit the cycling control,
+-- use an unranked source field, refresh only one mode, or persist after reload.
+do
+    local dropDungeon = result("dungeon:1", "Ruby Halls", { 101, 103 }, 5)
+    dropDungeon.kind = "dungeon"
+    local dropRaid = result("raid:1", "Iron Citadel", { 102 }, 7)
+    dropRaid.kind = "raid"
+    local voidDungeon = result("dungeon:2", "Azure Vault", { 201 }, 4)
+    voidDungeon.kind = "dungeon"
+    local voidRaid = result("raid:2", "Obsidian Throne", { 202 }, 8)
+    voidRaid.kind = "raid"
+    local charDB = {
+        preferredItems = { DROP = { [101] = true, [102] = true, [103] = true }, VOIDCORE = { [201] = true, [202] = true } },
+        preferredItemSources = { DROP = {}, VOIDCORE = {} },
+        voidcoreObtainedItems = {},
+    }
+    local scenario = newScenario({
+        pveFrame = true,
+        pveShown = false,
+        charDB = charDB,
+        directResults = { dropDungeon, dropRaid },
+        voidResults = { voidDungeon, voidRaid },
+    })
+    local env = scenario.env
+    PVEFrame:Show()
+    local panel = env:GetFrame("Where2GoPanel")
+    local sourceFilter = rawget(panel, "sourceFilterButton")
+    assert(sourceFilter and sourceFilter:GetText() == STRINGS.PANEL_SOURCE_ALL,
+        "a new recommendation panel should expose an All source filter beside ownership")
+    assert(sourceFilter.points[1][2] == panel.ownershipButton and sourceFilter.points[1][3] == "RIGHT",
+        "the source filter should be positioned beside the ownership filter")
+    assert(env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Ruby Halls"
+            and env:GetFrame("Where2GoPanelCard2").nameText:GetText() == "Iron Citadel",
+        "All should initially show ranked dungeons and raids")
+
+    local dropCalls = scenario.rankCalls.DROP
+    env:Click(sourceFilter)
+    assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_DUNGEONS and scenario.rankCalls.DROP == dropCalls + 1,
+        "cycling to Dungeons should immediately refresh the active Drop ranking")
+    assert(env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Ruby Halls"
+            and not env:GetFrame("Where2GoPanelCard2"):IsShown(),
+        "Dungeons should exclude ranked raids from Drop recommendations")
+    assert(env:GetFrame("Where2GoPanelBody").regions[2]:GetText() == "2 preferred items · 1 destinations",
+        "the summary should sum preferred targets instead of counting visible destinations")
+
+    Where2GoPanel.SetMode("VOIDCORE")
+    assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_DUNGEONS
+            and env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Azure Vault"
+            and not env:GetFrame("Where2GoPanelCard2"):IsShown(),
+        "the selected source filter should remain active when switching to Voidcore")
+    local voidCalls = scenario.rankCalls.VOIDCORE
+    env:Click(sourceFilter)
+    assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_RAIDS and scenario.rankCalls.VOIDCORE == voidCalls + 1,
+        "cycling to Raids should immediately refresh the active Voidcore ranking")
+    assert(env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Obsidian Throne"
+            and not env:GetFrame("Where2GoPanelCard2"):IsShown(),
+        "Raids should exclude ranked dungeons from Voidcore recommendations")
+
+    Where2GoPanel.SetMode("DROP")
+    assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_RAIDS
+            and env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Iron Citadel",
+        "the selected source filter should remain active when switching back to Drop")
+    dropCalls = scenario.rankCalls.DROP
+    env:Click(sourceFilter)
+    assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_ALL and scenario.rankCalls.DROP == dropCalls + 1,
+        "cycling from Raids should immediately return the active Drop ranking to All")
+    assert(env:GetFrame("Where2GoPanelCard1"):IsShown() and env:GetFrame("Where2GoPanelCard2"):IsShown(),
+        "cycling from Raids to All should restore both ranked source kinds")
+
+    scenario.setDirectResults({ dropRaid }, "Restoration")
+    env:Click(sourceFilter)
+    assert(env:GetFrame("Where2GoPanel").emptyText:GetText() == STRINGS.PANEL_NO_MATCHES,
+        "an empty selected source should explain that source filtering can remove all matches")
+
+    local reloaded = newScenario({
+        pveFrame = true,
+        pveShown = false,
+        charDB = charDB,
+        directResults = { dropDungeon, dropRaid },
+    })
+    PVEFrame:Show()
+    local reloadedPanel = reloaded.env:GetFrame("Where2GoPanel")
+    assert(reloadedPanel.sourceFilterButton:GetText() == STRINGS.PANEL_SOURCE_ALL
+            and reloaded.env:GetFrame("Where2GoPanelCard2"):IsShown(),
+        "a recreated panel should reset the session-only source filter to All")
 end
 
 -- Break caught: binding only at file load misses Blizzard's later-created PVEFrame,
