@@ -1,4 +1,5 @@
 dofile("Where2Go/Core/Sources.lua")
+dofile("Where2Go/Core/Locale.lua")
 
 local function assertNonEmptyArray(t, label)
     assert(type(t) == "table", label .. " should be a table")
@@ -11,10 +12,18 @@ assertNonEmptyArray(Where2GoSources.RAIDS, "Where2GoSources.RAIDS")
 local function checkInstance(instance, kind, index)
     local label = kind .. "[" .. index .. "]"
     assert(type(instance.name) == "string" and #instance.name > 0, label .. ".name should be a non-empty string")
+    assert(Where2GoLocale.CONTENT_NAMES.enUS[instance.name] ~= nil,
+        label .. ".name should have an enUS content-name entry")
+    assert(Where2GoLocale.CONTENT_NAMES.koKR[instance.name] ~= nil,
+        label .. ".name should have a koKR content-name entry")
     assertNonEmptyArray(instance.encounters, label .. ".encounters")
     for i, encounter in ipairs(instance.encounters) do
         local encLabel = label .. ".encounters[" .. i .. "]"
         assert(type(encounter.name) == "string" and #encounter.name > 0, encLabel .. ".name should be a non-empty string")
+        assert(Where2GoLocale.CONTENT_NAMES.enUS[encounter.name] ~= nil,
+            encLabel .. ".name should have an enUS content-name entry")
+        assert(Where2GoLocale.CONTENT_NAMES.koKR[encounter.name] ~= nil,
+            encLabel .. ".name should have a koKR content-name entry")
         assert(type(encounter.bossId) == "number", encLabel .. ".bossId should be a number")
         assertNonEmptyArray(encounter.itemIds, encLabel .. ".itemIds")
         for _, itemId in ipairs(encounter.itemIds) do

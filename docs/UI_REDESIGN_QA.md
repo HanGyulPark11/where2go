@@ -96,5 +96,5 @@ Status: the original checklist was passed by user confirmation on 2026-09-11. Ta
   items retained their effect text.
 - Voidcore reward-event compatibility still needs a real roll verification as
   recorded in the existing TODO. The UI does not claim complete historical data.
-- Existing source names remain data-owned English strings. Addon labels are
-  localized; native item names and tooltips use the client's language.
+- Source names are addon-owned and localized through `Locale.ContentName`.
+  Native item names and tooltips use the client's language.

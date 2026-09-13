@@ -81,6 +81,10 @@ local function ContentKey(result)
     return result.id or ((result.raidName or result.kind or "content") .. ":" .. tostring(result.name))
 end
 
+local function ContentName(name)
+    return Where2GoLocale.ContentName(name)
+end
+
 local function EnsureItemRow(card, index)
     local row = card.rows[index]
     if row then
@@ -172,11 +176,13 @@ local function PopulateCard(card, result)
     card.rowCount = #(result.targetItemIds or {})
     card.expandedHeight = CARD_HEADER_HEIGHT + (card.rowCount * ITEM_ROW_HEIGHT)
 
-    card.nameText:SetText(result.name or "")
+    local displayName = ContentName(result.name or "")
+    local displayRaidName = result.raidName and ContentName(result.raidName) or ""
+    card.nameText:SetText(displayName)
 
     local counts = string.format(L("PANEL_CARD_COUNTS"), result.targetCount or card.rowCount,
         result.eligibleCount or 0)
-    local detail = result.raidName or ""
+    local detail = displayRaidName
     if result.ilvl then
         local track = result.trackKey and Where2GoLocale.TrackLabel(result.trackKey) or nil
         local level
@@ -191,7 +197,7 @@ local function PopulateCard(card, result)
     card.detailText:SetText(detail)
     card.header:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(result.name or "")
+        GameTooltip:SetText(displayName)
         GameTooltip:AddLine(detail, 0.7, 0.75, 0.8, true)
         GameTooltip:AddLine(counts, 1, 1, 1, true)
         GameTooltip:AddLine(L("PANEL_ESTIMATE_HELP"), 0.7, 0.75, 0.8, true)
@@ -203,7 +209,7 @@ local function PopulateCard(card, result)
         local row = EnsureItemRow(card, index)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", card.frame, "TOPLEFT", 14, -CARD_HEADER_HEIGHT - ((index - 1) * ITEM_ROW_HEIGHT))
-        Where2GoItemRow.Populate(row, itemId, result.ilvl, result.name, result.bonusId,
+        Where2GoItemRow.Populate(row, itemId, result.ilvl, displayName, result.bonusId,
             result.trackKey, result.trackRank)
     end
 

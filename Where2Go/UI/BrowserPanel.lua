@@ -25,6 +25,10 @@ end
 
 local function ItemName(id) return C_Item.GetItemInfo(id) or ("Item #" .. id) end
 
+local function ContentName(name)
+    return Where2GoLocale.ContentName(name)
+end
+
 local function ItemEligible(id)
     local explicit = next(filters.specIds) ~= nil
     for _, spec in ipairs(AvailableSpecs()) do
@@ -83,7 +87,8 @@ RefreshRows = function()
         row.entry = entry
         row:SetShown(entry ~= nil)
         if entry then
-            local source = entry.raidName and (entry.raidName .. " - " .. entry.bossName) or entry.contentName
+            local source = entry.raidName and (ContentName(entry.raidName) .. " - " .. ContentName(entry.bossName))
+                or ContentName(entry.contentName)
             Where2GoItemRow.Populate(row, entry.itemId, entry.ilvl, source, entry.bonusId,
                 entry.trackKey, entry.trackRank)
             local saved = preferred[entry.itemId] == true
@@ -236,12 +241,12 @@ local function BuildFilters()
     CreateDropdown(bar, 6, -6, 242, "SOURCE_DROPDOWN_ALL", function()
         local options = { { name = L("SOURCE_GROUP_DUNGEONS") } }
         for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
-            table.insert(options, { id = "dungeon:" .. dungeon.instanceId, name = dungeon.name })
+            table.insert(options, { id = "dungeon:" .. dungeon.instanceId, name = ContentName(dungeon.name) })
         end
         for _, raid in ipairs(Where2GoSources.RAIDS) do
-            table.insert(options, { name = raid.name })
+            table.insert(options, { name = ContentName(raid.name) })
             for _, boss in ipairs(raid.encounters) do
-                table.insert(options, { id = "boss:" .. boss.bossId, name = boss.name })
+                table.insert(options, { id = "boss:" .. boss.bossId, name = ContentName(boss.name) })
             end
         end
         return options

@@ -57,9 +57,9 @@ local function run()
             or (id == 1 and { "HASTE_RATING", "CRIT_RATING" } or { "HASTE_RATING" }) }
     end
     Where2GoSources = { DUNGEONS = {
-        { instanceId = 1, name = "Test Halls", encounters = {
-            { bossId = 1, name = "First boss", itemIds = ids },
-            { bossId = 2, name = "Second boss", itemIds = { 1 } },
+        { instanceId = 1, name = "Voidscar Arena", encounters = {
+            { bossId = 1, name = "Taz'Rah", itemIds = ids },
+            { bossId = 2, name = "Atroxus", itemIds = { 1 } },
         } },
     }, RAIDS = {} }
     Where2GoRaidRanks = {
@@ -96,10 +96,11 @@ local function run()
     assert(preferredRow(2).summary:GetText() == "Head · 311 · Haste",
         "preferred rows must recover item level from their stored track bonus")
     GameTooltip = {
+        lines = {},
         SetOwner = function() end,
-        SetHyperlink = function(self, link) self.link = link end,
+        SetHyperlink = function(self, link) self.link = link; self.lines = {} end,
         SetItemByID = function() end,
-        AddLine = function() end,
+        AddLine = function(self, text) table.insert(self.lines, text) end,
         Show = function() end,
         Hide = function() end,
     }
@@ -114,6 +115,14 @@ local function run()
     env:RunScript(resultRow(1), "OnEnter")
     assert(GameTooltip.link == "item:1:0:0:0:0:0:0:0:0:0:0:0:1:12843",
         "browser result hovers must use their calculated track-only synthetic link")
+    GetLocale = function() return "koKR" end
+    dofile("Where2Go/Core/Locale.lua")
+    Where2GoBrowserPanel.Show("DROP")
+    env:RunScript(resultRow(1), "OnEnter")
+    assert(GameTooltip.lines[#GameTooltip.lines] == "공허흉터 투기장",
+        "browser result hovers should localize addon-owned dungeon source names on koKR clients")
+    GetLocale = function() return "enUS" end
+    dofile("Where2Go/Core/Locale.lua")
     dofile("Where2Go/Core/Ranking.lua")
     local snapshotCalls = 0
     local actualHasOwnedAtLeast = Where2GoEquipment.HasOwnedAtLeast

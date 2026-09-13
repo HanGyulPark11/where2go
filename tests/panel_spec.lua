@@ -51,7 +51,7 @@ local function newScenario(options)
         voidcoreObtainedItems = {},
     }
     Where2GoConstants = { ADDON_NAME = "Where2Go", EQUIPLOC_TO_SLOT = { INVTYPE_HEAD = "HEAD" } }
-    GetLocale = nil
+    GetLocale = options.locale and function() return options.locale end or nil
     dofile("Where2Go/Core/Locale.lua")
     dofile("Where2Go/Core/Preferences.lua")
 
@@ -751,6 +751,34 @@ do
     scenario.subscriptions.panel("DROP")
     assert(env:CountFrames() == warmedFrameCount,
         "repeated refresh with the same content should not allocate additional frames")
+end
+
+-- Break caught: addon-owned dungeon, raid, and boss names stay English on a
+-- koKR client even though the rest of the chrome is localized.
+do
+    local raidResult = result("boss:2888", "Nek'zali the Soulcoiler", { 101 }, 5)
+    raidResult.kind = "raid"
+    raidResult.raidName = "The Venomous Abyss"
+    local scenario = newScenario({
+        pveFrame = true,
+        pveShown = false,
+        locale = "koKR",
+        charDB = {
+            preferredItems = { DROP = { [101] = true, [102] = true }, VOIDCORE = {} },
+            preferredItemSources = { DROP = {}, VOIDCORE = {} },
+            voidcoreObtainedItems = {},
+        },
+        directResults = {
+            result("dungeon:2923", "Voidscar Arena", { 102 }, 4),
+            raidResult,
+        },
+    })
+    PVEFrame:Show()
+    local env = scenario.env
+    assert(env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "공허흉터 투기장",
+        "koKR panel cards should localize dungeon names")
+    assert(env:GetFrame("Where2GoPanelCard2").nameText:GetText() == "영혼살무사 네크잘리",
+        "koKR panel cards should localize raid boss names")
 end
 
 -- Break caught: mode changes route management to the wrong list, or a preference

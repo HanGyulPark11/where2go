@@ -51,6 +51,31 @@ See `docs/SEASON_CHECKLIST.md` for the full season-changeover procedure,
 covering both scripts above plus the manual steps for `Tracks.lua` and
 `RaidRanks.lua` that neither script covers.
 
+## `generate_content_locale.py`
+
+`generate_content_locale.py` fetches the same season instances as
+`generate_sources.py` from the Battle.net Game Data API Journal endpoints in
+both `en_US` and `ko_KR`. It matches instances and encounters by API ID, then
+stages a replacement `Where2GoLocale.CONTENT_NAMES` table so English
+`Sources.lua` names remain canonical keys while Korean clients can show
+official localized dungeon, raid, and boss names.
+
+Run it after `SEASON_INSTANCES` is current:
+
+```
+python tools/data-prep/generate_content_locale.py
+```
+
+Review `tools/data-prep/scratch/ContentNames.lua.new`. If it looks correct,
+copy only the generated `Where2GoLocale.CONTENT_NAMES` table into
+`Where2Go/Core/Locale.lua`, leaving the rest of the file intact.
+
+For generator development, run:
+
+```
+python tools/data-prep/test_generate_content_locale.py
+```
+
 ## `convert_item_link_bonuses.py`
 
 `convert_item_link_bonuses.py` turns the reviewed account-wide export produced

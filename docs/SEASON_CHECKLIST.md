@@ -28,7 +28,18 @@ earlier ones are done.
    the generator's own header does not carry forward every note from the
    committed file automatically.
 
-4. **Refresh `Where2Go/Core/VoidcacheIds.lua` (optional — currently
+4. **Regenerate localized content names.** Run the content-locale generator
+   against the same `SEASON_INSTANCES` used for `Sources.lua`:
+   ```
+   python tools/data-prep/generate_content_locale.py
+   ```
+   Review `tools/data-prep/scratch/ContentNames.lua.new`, then copy only the
+   generated `Where2GoLocale.CONTENT_NAMES` table into
+   `Where2Go/Core/Locale.lua`. The generator matches by API instance and
+   encounter IDs, so it avoids hand-translating raid and boss names from the
+   English canonical keys.
+
+5. **Refresh `Where2Go/Core/VoidcacheIds.lua` (optional — currently
    unused by any shipped feature).** No API endpoint exists for this
    data (see
    `docs/superpowers/specs/2026-09-03-phase7-spec-eligibility-design.md`'s
@@ -50,21 +61,21 @@ earlier ones are done.
    `[instanceId or bossId] = itemId` entries, replacing stale ones for
    content that rotated out.
 
-5. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
+6. **Re-measure `Where2Go/Core/RaidRanks.lua` in-client.** This file has
    no API equivalent. Determine each boss's relative item-level rank and any
    above-cap final-boss track. Update `RAID_BOSS_RANK`,
    `MYTH_FINAL_BOSS_IDS`, `MYTH_FINAL_ILVL`, `MYTH_FINAL_RANK`, and
    `MYTH_FINAL_BONUS_ID`; re-confirm the Mythic+ key+10-floor assumption.
 
-6. **Check `Where2Go/Core/Tracks.lua`.** Confirm each upgrade track's
+7. **Check `Where2Go/Core/Tracks.lua`.** Confirm each upgrade track's
    `bonusIdStart` and `ilvls` array, since the next scan removes every bonus
    ID these tables define.
 
-7. **Update `Where2GoConstants.SEASON_LABEL`.** Set the new season label
+8. **Update `Where2GoConstants.SEASON_LABEL`.** Set the new season label
    before generating either SavedVariables export, so both converters reject
    stale prior-season output.
 
-8. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** Run
+9. **Regenerate `Where2Go/Core/SpecEligibilityData.lua`.** Run
    `/where2go genspec reset` unconditionally, then `/where2go genspec` once
    on any character. The reset discards any old export, so updating the season
    label first is safe. A mid-season `Sources.lua` edit also requires this
@@ -72,7 +83,7 @@ earlier ones are done.
    plausible non-empty per-spec coverage, then hand-merge it into
    `Where2Go/Core/SpecEligibilityData.lua`.
 
-9. **Regenerate `Where2Go/Core/ItemLinkBonuses.lua`.** First run
+10. **Regenerate `Where2Go/Core/ItemLinkBonuses.lua`.** First run
    `/w2g genlinks reset`, then `/w2g genlinks` on any character out of combat.
    The scan prewarms tracked item IDs, then sets EJ difficulty and selects the
    instance once per source before selecting each tracked encounter at Mythic
@@ -93,7 +104,7 @@ earlier ones are done.
    for one item are a conflict. Do not apply a
    diagnostic export; fix the source/EJ issue and rerun the scan.
 
-10. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
+11. **Re-run the item-stats data-prep script.** Once `Sources.lua` is
    updated, its item IDs may have changed, so `Where2Go/Core/ItemStats.lua`
    needs regenerating too. See `tools/data-prep/README.md` for credential
    setup (same as step 2). From the repo root:
@@ -104,18 +115,19 @@ earlier ones are done.
    `tools/data-prep/scratch/ItemStats.lua.new`'s content into
    `Where2Go/Core/ItemStats.lua`.
 
-11. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
+12. **Update `tests/sources_spec.lua`'s season-specific assertions.** The
     check near the bottom of the file (currently asserting `RAIDS[2]` is
     "The Venomous Abyss" with exactly 8 encounters) is Season-2-specific.
     Replace it with an equivalent spot-check for the new season's actual
     raid content, or remove it if no longer meaningful.
 
-12. **Run the full test suite and commit.**
+13. **Run the full test suite and commit.**
     ```
     "C:\ProgramData\chocolatey\lib\lua51\tools\lua5.1.exe" tests/run_tests.lua
     ```
     Confirm all specs pass before committing the updated `Sources.lua`,
    `ItemStats.lua`, `ItemLinkBonuses.lua`, `RaidRanks.lua`, `Tracks.lua`,
-   `Constants.lua`, `Where2Go/Core/SpecEligibilityData.lua`, `sources_spec.lua`, and (only
-    if step 4 was actually performed this season) `Where2Go/Core/VoidcacheIds.lua`
+   `Constants.lua`, `Where2Go/Core/Locale.lua`,
+   `Where2Go/Core/SpecEligibilityData.lua`, `sources_spec.lua`, and (only
+    if step 5 was actually performed this season) `Where2Go/Core/VoidcacheIds.lua`
     together.
