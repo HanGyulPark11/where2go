@@ -180,7 +180,8 @@ function Where2GoItemRow.Populate(row, itemId, ilvl, sourceLabel, bonusId, track
     local icon = C_Item.GetItemIconByID(itemId)
     row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
-    local color = quality and ITEM_QUALITY_COLORS[quality]
+    local displayQuality = bonusId and 4 or quality
+    local color = displayQuality and ITEM_QUALITY_COLORS[displayQuality]
     local hex = color and color.hex or "|cffffffff"
     row.name:SetText(hex .. (name or ("Item #" .. itemId)) .. "|r")
 

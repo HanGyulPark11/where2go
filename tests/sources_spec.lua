@@ -45,4 +45,42 @@ local venomousAbyss = Where2GoSources.RAIDS[2]
 assert(venomousAbyss.name == "The Venomous Abyss", "RAIDS[2] should be The Venomous Abyss")
 assert(#venomousAbyss.encounters == 8, "The Venomous Abyss should have exactly 8 encounters")
 
+local NON_GEAR_OR_COSMETIC_ITEMS = {
+    [270900] = "Pattern: Snakeskin Lining",
+    [279211] = "Pillar of the Fanged Altar",
+    [264332] = "Amani Ritual Altar",
+    [263238] = "Illicit Long Table",
+    [256640] = "Pattern: Row Walker's Insurance",
+    [258487] = "Plans: Murder Row Fleet Feet",
+    [258518] = "Plans: Murder Row Fishhook",
+    [256746] = "Formula: Smuggler's Enchanted Edge",
+    [278245] = "Royal Attendant's Coffin",
+    [256428] = "Valdrakken Hanging Lamp",
+    [278982] = "Hatchery of Hissing Eggs",
+    [279112] = "Clumped Asteroidea",
+    [279115] = "Soulcoiler's Ritual Candle",
+    [281227] = "Soulcoiler's Rush'kah",
+    [280305] = "Soulcoil Remnant",
+    [279118] = "Lost Explorers' Mailbox",
+    [279122] = "Venom-Fanged Font",
+    [279131] = "Pillar of the Coiled Isle",
+    [275937] = "Hex Lord's Visage",
+    [275938] = "Hex Lord's Gaze",
+    [279125] = "The Venomous Abyss Aureate Trophy",
+    [279127] = "The Venomous Abyss Argent Trophy",
+    [279129] = "The Venomous Abyss Gleaming Trophy",
+    [279500] = "\"Rage of the Shackled\" Mural",
+    [275658] = "Primeval Skyfriend",
+}
+for _, group in ipairs({ Where2GoSources.DUNGEONS, Where2GoSources.RAIDS }) do
+    for _, source in ipairs(group) do
+        for _, encounter in ipairs(source.encounters) do
+            for _, itemId in ipairs(encounter.itemIds) do
+                assert(not NON_GEAR_OR_COSMETIC_ITEMS[itemId],
+                    "Sources.lua should exclude non-gear/cosmetic Journal rewards: " .. itemId)
+            end
+        end
+    end
+end
+
 print("sources_spec: OK, " .. #Where2GoSources.DUNGEONS .. " dungeon(s), " .. #Where2GoSources.RAIDS .. " raid(s) verified")

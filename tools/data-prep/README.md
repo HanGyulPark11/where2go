@@ -1,9 +1,12 @@
 # Where2Go data-prep tooling
 
 `generate_sources.py` regenerates `Where2Go/Core/Sources.lua`'s dungeon and
-raid item-pool data from the Battle.net Game Data API's Journal endpoints.
-It never writes `Sources.lua` directly — it stages its output at
-`scratch/Sources.lua.new` and prints a diff for you to review.
+raid gear item-pool data from the Battle.net Game Data API's Journal
+endpoints. The Journal can include recipes, housing decor, mounts, pets, and
+cosmetic appearances; the generator fetches each item's metadata and stages
+only equippable non-cosmetic armor or weapon rewards. It never writes
+`Sources.lua` directly — it stages its output at `scratch/Sources.lua.new` and
+prints a diff for you to review.
 
 ## One-time setup
 
@@ -25,6 +28,12 @@ $env:BLIZZARD_CLIENT_ID="<your id>"; $env:BLIZZARD_CLIENT_SECRET="<your secret>"
 Review the printed diff. If it looks correct, copy
 `tools/data-prep/scratch/Sources.lua.new`'s content into
 `Where2Go/Core/Sources.lua`.
+
+For generator development, run:
+
+```
+python tools/data-prep/test_generate_sources.py
+```
 
 ## `generate_item_stats.py`
 

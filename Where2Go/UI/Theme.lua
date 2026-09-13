@@ -11,6 +11,7 @@ Where2GoTheme.colors = {
     accent = { 0.940, 0.790, 0.480 },
     hover = { 0.145, 0.173, 0.208 },
     selected = { 0.180, 0.165, 0.110 },
+    selectedBorder = { 0.460, 0.390, 0.220 },
 }
 
 function Where2GoTheme.Box(frame, colorKey)

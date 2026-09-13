@@ -64,20 +64,32 @@ the useful-target numerator only. Voidcore reward history continues to change
 its eligible pool independently. Equipment and bag changes refresh the visible
 recommendation panel.
 
-## 2026-09-10: Direct-drop and Voidcore raid levels
+## 2026-09-10: Direct-drop and Voidcore reward levels
 
-Mythic raid direct-drop recommendations retain each boss's actual drop level:
-Myth 1/6, 2/6, or 3/6 for bosses 1–6 and Myth 9/6 for the final two.
-Voidcore raid rolls follow the equivalent Great Vault reward instead: Myth
-6/6 at item level 334 for bosses 1–6 and Myth 9/6 at item level 344 for the
-final two. The two ranking modes must carry separate item levels, ranks, and
-bonus IDs without mutating shared direct-drop entries.
+Mythic+ direct-drop recommendations use the current key-floor assumption:
+Hero 3/6. Voidcore dungeon rewards follow the equivalent Great Vault reward
+instead: Myth 1/6. Mythic raid direct-drop recommendations retain each boss's
+actual drop level: Myth 1/6, 2/6, or 3/6 for bosses 1–6 and Myth 9/6 for the
+final two. Voidcore raid rolls follow the equivalent Great Vault reward:
+Myth 6/6 at item level 334 for bosses 1–6 and Myth 9/6 at item level 344 for
+the final two. The two ranking modes must carry separate item levels, ranks,
+and bonus IDs without mutating shared direct-drop entries.
 
 Encounter Journal links are source templates rather than authoritative for
 the recommendation's calculated rank. Tooltip construction replaces only a
 recognized upgrade-track bonus with the calculated source bonus, preserving
 all other bonus IDs and trailing item-link fields. Successful links are
 cached by item and requested rank; a transient missing link remains retryable.
+
+## 2026-09-13: Source tables track gear, not every Journal reward
+
+The Battle.net Journal endpoints also return recipes, housing decor, mounts,
+pets, and cosmetic appearance pieces. Where2Go's recommendation model is about
+useful gear upgrades, so `Sources.lua` must exclude non-equippable rewards and
+`Armor / Cosmetic` rewards even when Blizzard lists them under a boss. The
+source generator filters by item class, subclass, and inventory type before
+staging `Sources.lua`; dependent generated tables should only cover the same
+tracked gear set.
 
 ## 2026-09-02: Presentation
 

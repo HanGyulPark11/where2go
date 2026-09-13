@@ -30,7 +30,7 @@ end
 for itemId in pairs(tracked) do
     assert(templates[itemId], "tracked item must have a full-link template: " .. itemId)
 end
-assert(templateCount == 354, "every current tracked item must have exactly one template")
+assert(templateCount == 329, "every current tracked item must have exactly one template")
 
 local expectedRaidTemplate = "item:%d:0:0:0:0:0:0:0:0:0:0:6:1:3524:1:28:7362:::::"
 for _, itemId in ipairs({ 268265, 268253, 271876 }) do

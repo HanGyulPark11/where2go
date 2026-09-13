@@ -9,6 +9,9 @@ Where2GoDirectDrop = {
 }
 
 Where2GoRaidRanks = {
+    GetVoidcoreDungeonIlvl = function()
+        return 318, "MYTH", 1, 12849
+    end,
     GetVoidcoreRaidIlvl = function(bossId)
         if bossId == 2883 then return 344, "MYTH", 9, 13848 end
         return 334, "MYTH", 6, 12854
@@ -18,8 +21,8 @@ Where2GoRaidRanks = {
 dofile("Where2Go/Core/VoidcoreDrop.lua")
 
 local content = Where2GoVoidcoreDrop.BuildContentList()
-assert(content[1].ilvl == 311 and content[1].trackRank == 3,
-    "Voidcore dungeon reward metadata should remain unchanged")
+assert(content[1].ilvl == 318 and content[1].trackKey == "MYTH" and content[1].trackRank == 1 and content[1].bonusId == 12849,
+    "Voidcore dungeon reward metadata should use the Myth 1/6 Voidcore reward, not direct-drop Hero 3/6")
 assert(content[2].ilvl == 334 and content[2].trackRank == 6 and content[2].bonusId == 12854,
     "Voidcore standard Mythic raid bosses should use Myth 6/6 reward metadata")
 assert(content[3].ilvl == 344 and content[3].trackRank == 9 and content[3].bonusId == 13848,

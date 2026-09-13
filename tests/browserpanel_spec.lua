@@ -36,8 +36,8 @@ local function run()
     StaticPopup_Show = function(key, _, _, data) popup = { key = key, data = data } end
     Where2GoCharDB = {
         voidcoreObtainedItems = {},
-        preferredItems = { DROP = { [2] = true }, VOIDCORE = { [14] = true } },
-        preferredItemSources = { DROP = { [2] = 12843 }, VOIDCORE = { [14] = 13848 } },
+        preferredItems = { DROP = { [2] = true }, VOIDCORE = { [1] = true, [14] = true } },
+        preferredItemSources = { DROP = { [2] = 12843 }, VOIDCORE = { [1] = 12843, [14] = 13848 } },
     }
     dofile("Where2Go/Core/Constants.lua")
     dofile("Where2Go/Core/Tracks.lua")
@@ -61,12 +61,18 @@ local function run()
             { bossId = 1, name = "Taz'Rah", itemIds = ids },
             { bossId = 2, name = "Atroxus", itemIds = { 1 } },
         } },
+        { instanceId = 2, name = "Kyrakka and Erkhart Stormvein", encounters = {} },
+        { instanceId = 3, name = "Nek'zali the Soulcoiler", encounters = {} },
+        { instanceId = 4, name = "Xathuux the Annihilator", encounters = {} },
+        { instanceId = 5, name = "Altar of Fangs", encounters = {} },
+        { instanceId = 6, name = "Murder Row", encounters = {} },
     }, RAIDS = {} }
     Where2GoRaidRanks = {
         MYTH_FINAL_BONUS_ID = 13848,
         MYTH_FINAL_ILVL = 344,
         MYTH_FINAL_RANK = 9,
         GetMythicPlusIlvl = function() return 311, "HERO", 3, 12843 end,
+        GetVoidcoreDungeonIlvl = function() return 318, "MYTH", 1, 12849 end,
     }
     dofile("Where2Go/UI/Theme.lua")
     dofile("Where2Go/Core/ItemLinkBonuses.lua")
@@ -76,6 +82,107 @@ local function run()
     Where2GoBrowserPanel.Show("DROP")
     local browser = assert(env:GetFrame("Where2GoBrowser"))
     assert(browser.modeButtons.DROP:GetText() == "Drop", "new action buttons must initialize their button text")
+    assert(browser.sourceDropdown.styleFrame == browser.sourceDropdown
+            and browser.sourceDropdown.template == "BackdropTemplate",
+        "dropdown styling and hit testing should live on the same plain BackdropTemplate dropdown frame")
+    assert(browser.sourceDropdown.displayText:GetText() == "Source",
+        "source dropdown should name the filtered category before a source is selected")
+    assert(rawget(browser.sourceDropdown.displayText, "parent") == browser.sourceDropdown,
+        "addon filter labels should be anchored to the full-width dropdown frame")
+    assert(browser.sourceDropdown.displayText:GetWidth() <= browser.sourceDropdown:GetWidth() - 40,
+        "filter labels should have an explicit width inside their button bounds")
+    assert(browser.slotDropdown.displayText:GetText() == "Slot",
+        "slot dropdown should name the filtered category before a slot is selected")
+    assert(browser.statDropdown.displayText:GetText() == "Stats",
+        "stat dropdown should name the filtered category before a stat is selected")
+    assert(browser.specDropdown.displayText:GetText() == "Arms",
+        "new browser windows should start with the current specialization selected")
+    assert(browser.search.template == "BackdropTemplate", "item search should use the addon backdrop instead of the default input template")
+    assert(browser.search.width == 370 and browser.search.height == 26, "item search should have a stable themed input size")
+    assert(browser.search.backdropColor[1] == Where2GoTheme.colors.inset[1], "item search should use the inset surface color")
+    assert(browser.search.fontObject == "GameFontHighlightSmall", "item search should use a visible theme font")
+    assert(browser.search.textInsets[1] == 10 and browser.search.textInsets[2] == 10,
+        "item search text should have horizontal breathing room")
+    env:RunScript(browser.search, "OnEditFocusGained")
+    assert(browser.search.backdropBorderColor[1] == Where2GoTheme.colors.border[1],
+        "focused empty item search should keep its normal border")
+    env:RunScript(browser.search, "OnEditFocusLost")
+    assert(browser.search.backdropBorderColor[1] == Where2GoTheme.colors.border[1],
+        "unfocused item search should restore its normal border")
+    assert(rawget(browser.sourceDropdown.displayText, "wordWrap") == false and rawget(browser.specDropdown.displayText, "wordWrap") == false,
+        "filter labels should be constrained to one line instead of wrapping inside short buttons")
+    assert(browser.specDropdown.points[1][1] == "TOPLEFT" and browser.specDropdown.points[1][2] == 696
+            and browser.specDropdown.points[1][3] == -8,
+        "specialization filter should sit in the top filter row with the other dropdowns")
+    assert(browser.resetFilters.points[1][1] == "TOPRIGHT" and browser.resetFilters.points[1][2] == -8
+            and browser.resetFilters.points[1][3] == -46,
+        "reset should move to the lower row so top-row filters have enough width")
+    assert(browser.sourceDropdown.width >= 320 and browser.specDropdown.width >= 220,
+        "filter buttons should reserve enough width for localized labels")
+    assert(browser.sourceDropdown.styleFrame.backdropColor[1] == Where2GoTheme.colors.surface[1],
+        "source dropdown should keep the normal background when no source filter is active")
+    local sourceToggles = {}
+    browser.sourceDropdown.menuGenerator(nil, {
+        CreateTitle = function() end,
+        CreateCheckbox = function(_, name, _, callback)
+            sourceToggles[name] = callback
+        end,
+    })
+    sourceToggles["Voidscar Arena"]()
+    assert(browser.sourceDropdown.displayText:GetText() == "Voidscar Arena",
+        "source dropdown should show the selected source label")
+    assert(browser.sourceDropdown.backdropBorderColor[1] == Where2GoTheme.colors.selectedBorder[1],
+        "selected filters should use a stronger border color")
+    browser.search:SetText("Storm")
+    assert(browser.search:GetText() == "Storm", "item search should retain entered text")
+    assert(browser.search.textColor[1] == Where2GoTheme.colors.text[1],
+        "item search text should use the readable theme text color")
+    assert(browser.search.backdropBorderColor[1] == Where2GoTheme.colors.selectedBorder[1],
+        "item search with text should use the selected filter border color")
+    local slotToggles = {}
+    browser.slotDropdown.menuGenerator(nil, {
+        CreateTitle = function() end,
+        CreateCheckbox = function(_, name, _, callback)
+            slotToggles[name] = callback
+        end,
+    })
+    slotToggles["Head"]()
+    slotToggles["Neck"]()
+    slotToggles["Shoulder"]()
+    assert(browser.slotDropdown.displayText:GetText() == "Head, Neck +1",
+        "filter dropdowns should list two selected items plus the number of additional selections when they fit")
+    sourceToggles["Kyrakka and Erkhart Stormvein"]()
+    sourceToggles["Nek'zali the Soulcoiler"]()
+    sourceToggles["Xathuux the Annihilator"]()
+    assert(browser.sourceDropdown.displayText:GetStringWidth() <= browser.sourceDropdown.displayText:GetWidth(),
+        "long English source combinations should be shortened to stay inside the source filter button")
+    GetLocale = function() return "koKR" end
+    dofile("Where2Go/Core/Locale.lua")
+    env:Click(browser.resetFilters)
+    sourceToggles = {}
+    local koreanSourceNames = {}
+    browser.sourceDropdown.menuGenerator(nil, {
+        CreateTitle = function() end,
+        CreateCheckbox = function(_, name, _, callback)
+            sourceToggles[name] = callback
+            table.insert(koreanSourceNames, name)
+        end,
+    })
+    sourceToggles[koreanSourceNames[#koreanSourceNames - 1]]()
+    sourceToggles[koreanSourceNames[#koreanSourceNames]]()
+    assert(browser.sourceDropdown.displayText:GetStringWidth() <= browser.sourceDropdown.displayText:GetWidth(),
+        "long Korean source combinations should stay inside the source filter button")
+    GetLocale = function() return "enUS" end
+    dofile("Where2Go/Core/Locale.lua")
+    assert(browser.sourceDropdown.styleFrame.backdropColor[1] == Where2GoTheme.colors.surface[1],
+        "source dropdown should not rely on background highlighting to communicate selected sources")
+    env:Click(browser.resetFilters)
+    assert(browser.sourceDropdown.displayText:GetText() == "Source",
+        "reset filters should restore the source category label")
+    assert(browser.specDropdown.displayText:GetText() == "Arms",
+        "reset filters should return to the current specialization rather than all specs")
+    assert(browser.sourceDropdown.styleFrame.backdropColor[1] == Where2GoTheme.colors.surface[1],
+        "reset filters should keep the source dropdown's normal background")
     local function preferredRow(id)
         for _, candidate in ipairs(env.frames) do
             if rawget(candidate, "parent") == browser.preferredList and rawget(candidate, "itemId") == id then return candidate end
@@ -123,6 +230,7 @@ local function run()
         "browser result hovers should localize addon-owned dungeon source names on koKR clients")
     GetLocale = function() return "enUS" end
     dofile("Where2Go/Core/Locale.lua")
+    Where2GoSources.DUNGEONS = { Where2GoSources.DUNGEONS[1] }
     dofile("Where2Go/Core/Ranking.lua")
     local snapshotCalls = 0
     local actualHasOwnedAtLeast = Where2GoEquipment.HasOwnedAtLeast
@@ -148,8 +256,8 @@ local function run()
     dofile("Where2Go/Core/VoidcoreDrop.lua")
     Where2GoCharDB.voidcoreObtainedItems[1] = true
     local voidcoreOwnedResults = Where2GoVoidcoreDrop.GetRankedResults()
-    assert(voidcoreOwnedResults[1].eligibleCount == 14 and voidcoreOwnedResults[1].targetCount == 0,
-        "Voidcore keeps obtained exclusions in its denominator while ownership removes only targets")
+    assert(voidcoreOwnedResults[1].eligibleCount == 14 and voidcoreOwnedResults[1].targetCount == 1,
+        "Voidcore dungeon rewards should use Myth 1/6 metadata while obtained exclusions still reduce the denominator")
     Where2GoCharDB.voidcoreObtainedItems[1] = nil
     Where2GoEquipment.GetOwnedSnapshot = function() return {} end
     Where2GoEquipment.SetOwnershipMode("ITEM")
@@ -197,15 +305,19 @@ local function run()
     env:Click(browser.selectAll)
     env:Click(browser.modeButtons.VOIDCORE)
     assert(not browser.addSelected:IsEnabled(), "mode change clears transient selection")
+    assert(preferredRow(1).summary:GetText() == "Head · 318 · Haste/Crit",
+        "stored Voidcore dungeon preferences should migrate from direct-drop Hero 3/6 to Voidcore Myth 1/6 metadata")
+    assert(Where2GoCharDB.preferredItemSources.VOIDCORE[1] == 12849,
+        "stored Voidcore dungeon source metadata should be corrected without removing and re-adding the item")
     assert(preferredRow(14).summary:GetText() == "Head · 344 · Haste",
-        "preferred rows must recover the special Myth 9/6 item level from the stored bonus")
+        "preferred rows must preserve special non-dungeon Voidcore item levels instead of overwriting every saved source")
     env:Click(resultRow(3).add)
     assert(Where2GoCharDB.preferredItems.VOIDCORE[3] and not Where2GoCharDB.preferredItems.DROP[3], "mode lists stay independent")
     env:Click(browser.modeButtons.DROP)
     env:Click(browser.clearPreferred)
     env:Click(browser.modeButtons.VOIDCORE)
     StaticPopupDialogs[popup.key].OnAccept({}, popup.data)
-    assert(savedCount("DROP") == 0 and savedCount("VOIDCORE") == 2, "clear confirmation retains its original mode")
+    assert(savedCount("DROP") == 0 and savedCount("VOIDCORE") == 3, "clear confirmation retains its original mode")
     env:Click(browser.modeButtons.DROP)
     env:Click(browser.undo)
     assert(Where2GoCharDB.preferredItems.DROP[2], "clear-all restores original list")

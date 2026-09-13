@@ -105,7 +105,7 @@ local function newScenario(options)
             return "Interface\\Icons\\INV_Misc_QuestionMark"
         end,
     }
-    ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" } }
+    ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" }, [4] = { hex = "|cffa335ee" } }
     dofile("Where2Go/UI/ItemRow.lua")
 
     local browserShows = {}
@@ -177,7 +177,7 @@ do
         GetItemInfoInstant = function(itemId) return itemId, nil, nil, "INVTYPE_HEAD" end,
         GetItemIconByID = function() return 1 end,
     }
-    ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" } }
+    ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" }, [4] = { hex = "|cffa335ee" } }
     strsplit = function(separator, value)
         local fields = {}
         for field in (value .. separator):gmatch("(.-)" .. separator) do
@@ -342,6 +342,10 @@ do
     Where2GoItemRow.Populate(reusedRow, 268258, 321, nil, 12850, "MYTH", 2)
     assert(GameTooltip.link == contextualLink(268258, 12850),
         "repopulating a hovered pooled row must immediately replace the old item's visible tooltip")
+
+    local sourceRankRow = itemRow(270164, 12843, 311, "HERO", 3)
+    assert(sourceRankRow.name:GetText():match("^|cffa335ee"),
+        "a tracked dungeon/raid source item should render as epic even when cached base item quality is rare")
 end
 
 -- Break caught: the ownership exclusion control either changes only one
@@ -421,6 +425,8 @@ do
     env:Click(sourceFilter)
     assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_DUNGEONS and scenario.rankCalls.DROP == dropCalls + 1,
         "cycling to Dungeons should immediately refresh the active Drop ranking")
+    assert(sourceFilter.backdropColor[1] == Where2GoTheme.colors.surface[1],
+        "the recommendation source filter should communicate selection through text rather than background highlighting")
     assert(env:GetFrame("Where2GoPanelCard1").nameText:GetText() == "Ruby Halls"
             and not env:GetFrame("Where2GoPanelCard2"):IsShown(),
         "Dungeons should exclude ranked raids from Drop recommendations")
@@ -448,6 +454,8 @@ do
     env:Click(sourceFilter)
     assert(sourceFilter:GetText() == STRINGS.PANEL_SOURCE_ALL and scenario.rankCalls.DROP == dropCalls + 1,
         "cycling from Raids should immediately return the active Drop ranking to All")
+    assert(sourceFilter.backdropColor[1] == Where2GoTheme.colors.surface[1],
+        "the recommendation source filter should keep the normal background when All is active")
     assert(env:GetFrame("Where2GoPanelCard1"):IsShown() and env:GetFrame("Where2GoPanelCard2"):IsShown(),
         "cycling from Raids to All should restore both ranked source kinds")
 

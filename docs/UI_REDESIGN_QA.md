@@ -74,11 +74,12 @@ Status: the original checklist was passed by user confirmation on 2026-09-11. Ta
     keeps the contextual link. When tooltip metadata is unavailable or conflicts,
     confirm the canonical track-only tooltip remains correct.
     Confirm hovering never changes the open Encounter Journal's selection or
-    loot view. In Drop mode, Mythic raid bosses 1–6 must
-    retain their direct 1/6, 2/6, or 3/6 levels and the final two must show
-    Myth 9/6 (344). In Voidcore mode, bosses 1–6 must show Myth 6/6 (334) and
-    the final two must show Myth 9/6 (344). Re-hover after a cold-cache miss
-    and confirm the canonical synthetic link remains correct.
+    loot view. In Drop mode, Mythic+ dungeon rows must show Hero 3/6 and
+    Mythic raid bosses 1–6 must retain their direct 1/6, 2/6, or 3/6 levels
+    while the final two show Myth 9/6 (344). In Voidcore mode, dungeon rows
+    must show Myth 1/6, bosses 1–6 must show Myth 6/6 (334), and the final
+    two must show Myth 9/6 (344). Re-hover after a cold-cache miss and confirm
+    the canonical synthetic link remains correct.
     Verify the browser results, saved preferences, and recommendation-card rows
     show localized slot · item level · fixed secondary stats; rows with no
     fixed secondary stats must end after item level.

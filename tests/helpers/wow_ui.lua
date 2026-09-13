@@ -52,6 +52,16 @@ local function newRegion(kind, name, parent)
         return self.text
     end
 
+    function methods:GetStringWidth()
+        local text = self.text or ""
+        local width = 0
+        for i = 1, #text do
+            local byte = string.byte(text, i)
+            width = width + (byte and byte >= 128 and 6 or 7)
+        end
+        return width
+    end
+
     function methods:SetTextColor(...)
         self.textColor = { ... }
     end
@@ -287,6 +297,18 @@ function WowUI.New()
         self.backdropBorderColor = { ... }
     end
 
+    function frameMethods:SetTextInsets(...)
+        self.textInsets = { ... }
+    end
+
+    function frameMethods:SetTextColor(...)
+        self.textColor = { ... }
+    end
+
+    function frameMethods:SetFontObject(value)
+        self.fontObject = value
+    end
+
     function frameMethods:SetText(text)
         self.text = text
         local fontString = rawget(self, "fontString")
@@ -321,6 +343,10 @@ function WowUI.New()
 
     function frameMethods:SetAlpha(value)
         self.alpha = value
+    end
+
+    function frameMethods:SetHitRectInsets(...)
+        self.hitRectInsets = { ... }
     end
 
     function frameMethods:SetFrameStrata(value)
@@ -461,8 +487,12 @@ function WowUI.New()
         if name then
             self.namedFrames[name] = frame
         end
-        if template == "WowStyle1FilterDropdownTemplate" then
+        if type(template) == "string" and template:find("WowStyle1FilterDropdownTemplate", 1, true) then
             frame.Text = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            frame.dropdownArrow = frame:CreateTexture(nil, "ARTWORK")
+            frame.dropdownArrow:SetTexture("Interface\Buttons\UI-ScrollBar-ScrollDownButton-Up")
+            frame.dropdownBorder = frame:CreateTexture(nil, "BACKGROUND")
+            frame.dropdownBorder:SetTexture("Interface\Buttons\UI-Silver-Button-Up")
         end
         return frame
     end

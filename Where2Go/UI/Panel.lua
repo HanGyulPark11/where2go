@@ -272,6 +272,8 @@ end
 local function UpdateSourceFilterButton()
     if sourceFilterButton then
         sourceFilterButton:SetText(L("PANEL_SOURCE_" .. currentSourceFilter))
+        Where2GoTheme.Box(sourceFilterButton, "surface")
+        sourceFilterButton:GetFontString():SetTextColor(unpack(Where2GoTheme.colors.text))
     end
 end
 

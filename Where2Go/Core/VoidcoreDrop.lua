@@ -15,10 +15,9 @@ local function IsPreferredVoidcore(itemId)
     return Where2GoCharDB.preferredItems.VOIDCORE[itemId] == true
 end
 
--- Voidcore raid rolls match Great Vault reward levels, which differ from
--- direct boss drops. Copy entries before applying those levels so the Drop
--- view remains unchanged. Dungeon reward metadata is already assembled at
--- the intended key-level assumption and is kept as-is.
+-- Voidcore rolls match Great Vault-equivalent reward levels, which differ
+-- from direct drops. Copy entries before applying those levels so the Drop
+-- view remains unchanged.
 function Where2GoVoidcoreDrop.BuildContentList()
     local content = {}
     for _, sourceEntry in ipairs(Where2GoDirectDrop.BuildContentList()) do
@@ -26,7 +25,10 @@ function Where2GoVoidcoreDrop.BuildContentList()
         for key, value in pairs(sourceEntry) do
             entry[key] = value
         end
-        if entry.kind == "raid" then
+        if entry.kind == "dungeon" then
+            entry.ilvl, entry.trackKey, entry.trackRank, entry.bonusId =
+                Where2GoRaidRanks.GetVoidcoreDungeonIlvl()
+        elseif entry.kind == "raid" then
             local bossId = tonumber(string.match(entry.id or "", "^boss:(%d+)$"))
             if bossId then
                 entry.ilvl, entry.trackKey, entry.trackRank, entry.bonusId =

@@ -23,6 +23,15 @@ local function AvailableSpecs()
     return specs
 end
 
+local function ResetFiltersToDefaults()
+    filters = { sources = {}, slots = {}, stats = {}, specIds = {}, specEligibleOnly = true }
+    local currentSpec = GetSpecialization and GetSpecialization()
+    if currentSpec then
+        local specId = GetSpecializationInfo(currentSpec)
+        if specId then filters.specIds[specId] = true end
+    end
+end
+
 local function ItemName(id) return C_Item.GetItemInfo(id) or ("Item #" .. id) end
 
 local function ContentName(name)
@@ -38,7 +47,10 @@ local function ItemEligible(id)
 end
 
 local function EntryLevel(entry)
-    if entry.kind == "dungeon" then return Where2GoRaidRanks.GetMythicPlusIlvl() end
+    if entry.kind == "dungeon" then
+        if currentMode == "VOIDCORE" then return Where2GoRaidRanks.GetVoidcoreDungeonIlvl() end
+        return Where2GoRaidRanks.GetMythicPlusIlvl()
+    end
     if currentMode == "VOIDCORE" then return Where2GoRaidRanks.GetVoidcoreRaidIlvl(entry.bossId) end
     return Where2GoRaidRanks.GetRaidIlvl(entry.bossId)
 end
@@ -48,6 +60,20 @@ local function Clamp(offset, count) return math.max(0, math.min(offset, math.max
 local function Feedback(key, count)
     frame.feedback:SetText(count and string.format(L(key), count) or L(key))
     UpdateActions()
+end
+
+local function NormalizePreferredSources(preferred, sources)
+    if currentMode ~= "VOIDCORE" or not pool then return end
+    local _, _, _, directDungeonBonus = Where2GoRaidRanks.GetMythicPlusIlvl()
+    for _, entry in ipairs(pool) do
+        if entry.kind == "dungeon" and preferred[entry.itemId] == true
+                and (sources[entry.itemId] == nil or sources[entry.itemId] == directDungeonBonus) then
+            local _, _, _, voidcoreBonus = Where2GoRaidRanks.GetVoidcoreDungeonIlvl()
+            if type(voidcoreBonus) == "number" then
+                sources[entry.itemId] = voidcoreBonus
+            end
+        end
+    end
 end
 
 local function Add(items)
@@ -115,7 +141,8 @@ end
 Refresh = function(resetSelection)
     if not frame or not pool or refreshing then return end
     refreshing = true
-    local preferred = Where2GoPreferences.Get(currentMode)
+    local preferred, sources = Where2GoPreferences.Get(currentMode)
+    NormalizePreferredSources(preferred, sources)
     local context = {
         getSlot = function(id)
             local _, _, _, loc = C_Item.GetItemInfoInstant(id)
@@ -202,18 +229,51 @@ local function EmptyLabel(parent, width, text)
     return label
 end
 
+local function TextFits(label, text)
+    label:SetText(text)
+    if label.GetStringWidth and label:GetStringWidth() > label:GetWidth() then
+        return false
+    end
+    return true
+end
+
+local function FormatDropdownText(dropdown, defaultKey, labels)
+    if #labels == 0 then return L(defaultKey) end
+    if #labels == 1 then return labels[1] end
+
+    local twoLabel = labels[1] .. ", " .. labels[2]
+    if #labels == 2 and TextFits(dropdown.displayText, twoLabel) then
+        return twoLabel
+    end
+
+    local twoPlus = twoLabel .. " +" .. (#labels - 2)
+    if #labels > 2 and TextFits(dropdown.displayText, twoPlus) then
+        return twoPlus
+    end
+
+    return string.format(L("FILTER_MORE"), labels[1], #labels - 1)
+end
+
 local function CreateDropdown(parent, x, y, width, defaultKey, getOptions, isSelected, toggle, enabled)
-    local dropdown = CreateFrame("DropdownButton", nil, parent, "WowStyle1FilterDropdownTemplate")
+    local dropdown = CreateFrame("DropdownButton", nil, parent, "BackdropTemplate")
     dropdown:SetPoint("TOPLEFT", x, y)
-    dropdown:SetWidth(width)
+    dropdown:SetSize(width, 28)
+    dropdown.styleFrame = dropdown
+    if dropdown.SetHitRectInsets then dropdown:SetHitRectInsets(0, 0, 0, 0) end
+    dropdown.displayText = T.Text(dropdown, "GameFontHighlightSmall", "")
+    dropdown.displayText:SetPoint("LEFT", 14, 0)
+    dropdown.displayText:SetWidth(width - 40)
+    dropdown.displayText:SetJustifyV("MIDDLE")
+    dropdown.displayText:SetWordWrap(false)
     local function Update()
         local labels = {}
         for _, option in ipairs(getOptions()) do
             if option.id and isSelected(option.id) then table.insert(labels, option.name) end
         end
-        if #labels == 0 then dropdown.Text:SetText(L(defaultKey))
-        elseif #labels == 1 then dropdown.Text:SetText(labels[1])
-        else dropdown.Text:SetText(string.format(L("FILTER_MORE"), labels[1], #labels - 1)) end
+        dropdown.displayText:SetText(FormatDropdownText(dropdown, defaultKey, labels))
+        T.Box(dropdown.styleFrame, "surface")
+        dropdown.styleFrame:SetBackdropBorderColor(unpack(#labels > 0 and T.colors.selectedBorder or T.colors.border))
+        dropdown.displayText:SetTextColor(unpack(T.colors.text))
         if enabled then dropdown:SetEnabled(enabled()) end
     end
     dropdown:SetupMenu(function(_, root)
@@ -238,7 +298,7 @@ local function BuildFilters()
     bar:SetPoint("TOPLEFT", 16, -100)
     bar:SetSize(928, 82)
     T.Box(bar, "surface")
-    CreateDropdown(bar, 6, -6, 242, "SOURCE_DROPDOWN_ALL", function()
+    frame.sourceDropdown = CreateDropdown(bar, 8, -8, 320, "FILTER_SOURCE", function()
         local options = { { name = L("SOURCE_GROUP_DUNGEONS") } }
         for _, dungeon in ipairs(Where2GoSources.DUNGEONS) do
             table.insert(options, { id = "dungeon:" .. dungeon.instanceId, name = ContentName(dungeon.name) })
@@ -251,7 +311,7 @@ local function BuildFilters()
         end
         return options
     end, function(id) return filters.sources[id] == true end, function(id) ToggleMap(filters.sources, id) end)
-    CreateDropdown(bar, 264, -6, 158, "SLOT_DROPDOWN_ALL", function()
+    frame.slotDropdown = CreateDropdown(bar, 340, -8, 150, "FILTER_SLOT", function()
         local options = {}
         for _, id in ipairs(SLOT_ORDER) do table.insert(options, { id = id, name = Where2GoLocale.SlotLabel(id) }) end
         return options
@@ -260,7 +320,7 @@ local function BuildFilters()
         for _, stat in ipairs(filters.stats) do if stat == id then return true end end
         return false
     end
-    CreateDropdown(bar, 438, -6, 170, "STAT_DROPDOWN_ALL", function()
+    frame.statDropdown = CreateDropdown(bar, 502, -8, 182, "FILTER_STAT", function()
         local options = {}
         for _, id in ipairs(STAT_ORDER) do table.insert(options, { id = id, name = Where2GoLocale.StatLabel(id) }) end
         return options
@@ -269,25 +329,25 @@ local function BuildFilters()
             for i, stat in ipairs(filters.stats) do if stat == id then table.remove(filters.stats, i); break end end
         else table.insert(filters.stats, id) end
     end)
-    frame.resetFilters = T.Button(bar, L("FILTER_RESET"), 110, 26, function()
-        filters = { sources = {}, slots = {}, stats = {}, specIds = {}, specEligibleOnly = true }
+    frame.resetFilters = T.Button(bar, L("FILTER_RESET"), 110, 28, function()
+        ResetFiltersToDefaults()
         frame.eligible:SetChecked(true)
         frame.search:SetText("")
         for _, update in ipairs(dropdownUpdates) do update() end
         FiltersChanged()
     end)
-    frame.resetFilters:SetPoint("TOPRIGHT", -8, -6)
-    frame.specDropdown = CreateDropdown(bar, 6, -44, 192, "SPEC_DROPDOWN_ALL", AvailableSpecs,
+    frame.specDropdown = CreateDropdown(bar, 696, -8, 224, "FILTER_SPEC", AvailableSpecs,
         function(id) return filters.specIds[id] == true end,
         function(id) ToggleMap(filters.specIds, id) end,
         function() return filters.specEligibleOnly end)
+    frame.resetFilters:SetPoint("TOPRIGHT", -8, -46)
     frame.eligible = CreateFrame("CheckButton", nil, bar, "UICheckButtonTemplate")
     frame.eligible:SetSize(24, 24)
-    frame.eligible:SetPoint("TOPLEFT", 210, -45)
+    frame.eligible:SetPoint("TOPLEFT", 8, -48)
     frame.eligible:SetChecked(true)
     local eligibleText = T.Text(bar, "GameFontHighlightSmall", L("ELIGIBLE_ONLY"))
     eligibleText:SetPoint("LEFT", frame.eligible, "RIGHT", 2, 0)
-    eligibleText:SetWidth(200)
+    eligibleText:SetWidth(250)
     frame.eligible:SetScript("OnClick", function(self)
         filters.specEligibleOnly = self:GetChecked() and true or false
         for _, update in ipairs(dropdownUpdates) do update() end
@@ -300,13 +360,28 @@ local function BuildFilters()
     end)
     frame.specDropdown:HookScript("OnLeave", function() GameTooltip:Hide() end)
     local searchLabel = T.Text(bar, "GameFontHighlightSmall", L("SEARCH_LABEL"))
-    searchLabel:SetPoint("TOPLEFT", 464, -51)
-    frame.search = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
-    frame.search:SetPoint("TOPLEFT", 565, -47)
-    frame.search:SetSize(347, 24)
+    searchLabel:SetPoint("TOPLEFT", 320, -52)
+    frame.search = CreateFrame("EditBox", nil, bar, "BackdropTemplate")
+    frame.search:SetPoint("TOPLEFT", 424, -48)
+    frame.search:SetSize(370, 26)
+    T.Box(frame.search, "inset")
+    frame.search:SetFontObject("GameFontHighlightSmall")
+    frame.search:SetTextColor(unpack(T.colors.text))
+    frame.search:SetTextInsets(10, 10, 0, 0)
     frame.search:SetAutoFocus(false)
+    frame.search:SetScript("OnEditFocusGained", function(self)
+        local text = self:GetText() or ""
+        self:SetBackdropBorderColor(unpack(text ~= "" and T.colors.selectedBorder or T.colors.border))
+    end)
+    frame.search:SetScript("OnEditFocusLost", function(self)
+        local text = self:GetText() or ""
+        self:SetBackdropBorderColor(unpack(text ~= "" and T.colors.selectedBorder or T.colors.border))
+    end)
     frame.search:SetScript("OnTextChanged", function(self)
-        filters.searchText = self:GetText(); FiltersChanged()
+        local text = self:GetText() or ""
+        filters.searchText = text
+        self:SetBackdropBorderColor(unpack(text ~= "" and T.colors.selectedBorder or T.colors.border))
+        FiltersChanged()
     end)
     frame.search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 end
@@ -481,6 +556,7 @@ function Where2GoBrowserPanel.Show(mode)
     if not frame then
         selection = Where2GoSelection.New()
         pool = Where2GoItemBrowser.BuildItemPool()
+        ResetFiltersToDefaults()
         CreateBrowser()
         for _, entry in ipairs(pool) do
             if not pendingItems[entry.itemId] and not C_Item.GetItemInfo(entry.itemId) then

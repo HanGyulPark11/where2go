@@ -61,8 +61,39 @@ def api_get(token, path, namespace="static-us", locale="en_US"):
     with urllib.request.urlopen(req) as resp:
         return json.load(resp)
 
+def is_gear_reward(item_data):
+    item_class = item_data.get("item_class", {}).get("name")
+    item_subclass = item_data.get("item_subclass", {}).get("name")
+    inventory_type = item_data.get("inventory_type", {}).get("type")
+    if inventory_type == "NON_EQUIP":
+        return False
+    if item_class not in {"Armor", "Weapon"}:
+        return False
+    if item_subclass == "Cosmetic":
+        return False
+    return True
 
-def fetch_instance(token, instance_id):
+
+def fetch_gear_item_ids(token, encounter_detail, item_cache):
+    item_ids = []
+    skipped = []
+    for item in encounter_detail.get("items", []):
+        item_id = item["item"]["id"]
+        if item_id not in item_cache:
+            item_cache[item_id] = api_get(token, f"/data/wow/item/{item_id}")
+        if is_gear_reward(item_cache[item_id]):
+            item_ids.append(item_id)
+        else:
+            skipped.append(item_id)
+    if skipped:
+        print(
+            "Skipped non-gear/cosmetic Journal rewards for "
+            f"{encounter_detail['name']}: {', '.join(str(item_id) for item_id in skipped)}"
+        )
+    return item_ids
+
+
+def fetch_instance(token, instance_id, item_cache):
     instance = api_get(token, f"/data/wow/journal-instance/{instance_id}")
     os.makedirs(SCRATCH, exist_ok=True)
     with open(
@@ -78,7 +109,7 @@ def fetch_instance(token, instance_id):
             os.path.join(SCRATCH, f"raw_encounter_{enc_id}.json"), "w", encoding="utf-8"
         ) as f:
             json.dump(detail, f)
-        item_ids = [item["item"]["id"] for item in detail.get("items", [])]
+        item_ids = fetch_gear_item_ids(token, detail, item_cache)
         encounters.append({
             "bossId": enc_id,
             "name": detail["name"],
@@ -167,8 +198,9 @@ def diff_against_current(new_content):
 
 def main():
     token = get_token()
-    dungeons = [fetch_instance(token, iid) for iid in SEASON_INSTANCES["dungeons"]]
-    raids = [fetch_instance(token, iid) for iid in SEASON_INSTANCES["raids"]]
+    item_cache = {}
+    dungeons = [fetch_instance(token, iid, item_cache) for iid in SEASON_INSTANCES["dungeons"]]
+    raids = [fetch_instance(token, iid, item_cache) for iid in SEASON_INSTANCES["raids"]]
 
     check_structural_warnings("DUNGEONS", dungeons)
     check_structural_warnings("RAIDS", raids)

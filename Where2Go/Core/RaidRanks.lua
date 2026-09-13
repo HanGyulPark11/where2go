@@ -67,6 +67,14 @@ function Where2GoRaidRanks.GetVoidcoreRaidIlvl(bossId)
     return track.ilvls[rank], "MYTH", rank, track.bonusIdStart + rank - 1
 end
 
+-- Voidcore dungeon rewards use the Great Vault-equivalent Myth 1/6 reward
+-- instead of the direct-run Mythic+ Hero 3/6 drop.
+function Where2GoRaidRanks.GetVoidcoreDungeonIlvl()
+    local track = Where2GoTracks.UPGRADE_TRACKS.MYTH
+    local rank = 1
+    return track.ilvls[rank], "MYTH", rank, track.bonusIdStart + rank - 1
+end
+
 -- Returns (ilvl, trackKey, rank, bonusId) for the fixed Mythic+ key+10
 -- assumption. See GetRaidIlvl's comment above re: trackKey/bonusId.
 function Where2GoRaidRanks.GetMythicPlusIlvl()

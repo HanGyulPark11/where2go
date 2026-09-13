@@ -18,8 +18,9 @@ earlier ones are done.
 3. **Review the diff.** The script prints a diff between the current
    `Where2Go/Core/Sources.lua` and the freshly generated data. Read it
    carefully — look especially at the structural warnings the script
-   prints above the diff (empty item lists, duplicate boss IDs). If it
-   looks correct, copy `tools/data-prep/scratch/Sources.lua.new`'s
+   prints above the diff (empty item lists, duplicate boss IDs, and skipped
+   non-gear or cosmetic Journal rewards). If it looks correct, copy
+   `tools/data-prep/scratch/Sources.lua.new`'s
    content into `Where2Go/Core/Sources.lua`. Also update the generator's
    `SEASON_LABEL` constant (near the top of `generate_sources.py`) to
    match this season, and review whether any data-quality notes in
